@@ -164,4 +164,4 @@ FASYSTEM/
 
 ---
 
-© 2026 MACCANSOFT Systems. All rights reserved.
+© 2026 MACCANSOFT Systems. All rights reserved.# InventorySorabjee
