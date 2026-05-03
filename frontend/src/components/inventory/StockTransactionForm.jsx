@@ -180,7 +180,7 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 category_id: it.category_id,
                 power_id: it.power_id,
                 reqTransNo: it.reqTransNo, // Preserve source Trans ID for grouping
-                stock_required: it.stock_received || it.qty || 0, // Mapping Request Stock to Stock Required
+                stock_required: it.qty || 0, // Mapping Request Stock to Stock Required
                 qty: 1, 
                 rate: 0,
                 amount: 0,

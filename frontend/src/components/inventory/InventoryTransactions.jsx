@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Repeat, Truck, FileText, RefreshCw, Plus, Search, MapPin, Trash2, Printer, Filter, CheckSquare, Square } from 'lucide-react';
+import { ShoppingCart, Repeat, Truck, FileText, RefreshCw, Plus, Search, MapPin, Trash2, Printer, Filter, CheckSquare, Square, Upload } from 'lucide-react';
 import SearchableSelect from '../common/SearchableSelect';
 import { printTable, exportToCSV } from '../../utils/exportUtils';
 import { formatAmount, formatQty } from '../../utils/numberUtils';
 import ExportModal from '../common/ExportModal';
+import ImportModal from '../common/ImportModal';
 import StockTransactionForm from './StockTransactionForm';
 import SalesInvoicePrint from './SalesInvoicePrint';
 
@@ -45,6 +46,7 @@ const InventoryTransactions = ({
     const [search, setSearch] = useState('');
     const [activeFilter, setActiveFilter] = useState(initialType);
     const [exportModal, setExportModal] = useState(false);
+    const [importModal, setImportModal] = useState(false);
     const [showPrint, setShowPrint] = useState(null); // stores invoice ID
     const [filterLocationId, setFilterLocationId] = useState(viewLocationId);
     
@@ -277,6 +279,12 @@ const InventoryTransactions = ({
                             onClick={() => setExportModal(true)}>
                             <FileText size={15} /> Export
                         </button>
+                        {activeFilter === 'STOCK_OPENING' && !isFYClosed && (
+                            <button className="btn-secondary" style={{ padding: '6px 12px', height: 36, display: 'flex', alignItems: 'center', gap: 6 }}
+                                onClick={() => setImportModal(true)}>
+                                <Upload size={15} /> Import
+                            </button>
+                        )}
                         {initialType !== 'ALL' && !isFYClosed && activeFilter !== 'TRANSFER' && (
                             <button className="btn-primary" onClick={() => setActiveForm(activeFilter)}>
                                 <Plus size={16} /> New {currentTypeInfo?.label}
@@ -668,6 +676,16 @@ const InventoryTransactions = ({
                         printTable(reportName, headers, data, fields, companyInfo, reportMeta);
                     }
                 }}
+            />
+
+            <ImportModal
+                isOpen={importModal}
+                onClose={() => setImportModal(false)}
+                title="Stock Opening Registry"
+                endpoint="/api/inventory/opening-balances/import"
+                fiscal_year_id={currentUser.fiscal_year_id}
+                location_id={currentUser.location_id}
+                onComplete={fetchTransactions}
             />
         </div >
     );

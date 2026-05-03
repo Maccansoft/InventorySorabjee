@@ -903,6 +903,169 @@ router.post('/opening-balances', async (req, res) => {
     }
 });
 
+// Helper to parse various date formats from CSV to YYYY-MM-DD
+function parseCSVDate(dateStr) {
+    if (!dateStr || dateStr === '-' || dateStr === 'N/A') return null;
+    
+    // Handle DD-MMM-YYYY (e.g., 01-MAY-2026)
+    if (typeof dateStr === 'string' && dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+            const day = parts[0];
+            const monthStr = parts[1].toUpperCase();
+            const year = parts[2];
+            const months = {
+                'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+                'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+            };
+            const month = months[monthStr];
+            if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+        }
+    }
+
+    // Handle DD/MM/YYYY
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            // Check if it's YYYY/MM/DD or DD/MM/YYYY
+            if (parts[0].length === 4) return dateStr.replace(/\//g, '-');
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+    }
+
+    // Fallback to JS Date
+    try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    } catch (e) {}
+
+    return null;
+}
+
+router.post('/opening-balances/import', async (req, res) => {
+    let conn;
+    try {
+        const { rows, fiscal_year_id, location_id } = req.body;
+        if (!rows || !rows.length) return res.status(400).json({ error: 'No data provided' });
+
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+
+        // 1. Fetch Masters for mapping
+        const [makers] = await conn.query('SELECT id, name FROM makers');
+        const [categories] = await conn.query('SELECT id, name FROM categories');
+        const [powers] = await conn.query('SELECT id, power FROM powers');
+
+        const makerMap = Object.fromEntries(makers.map(m => [m.name.toLowerCase().trim(), m.id]));
+        const categoryMap = Object.fromEntries(categories.map(c => [c.name.toLowerCase().trim(), c.id]));
+        const powerMap = Object.fromEntries(powers.map(p => [p.power.toLowerCase().trim(), p.id]));
+
+        let successCount = 0;
+        let failedCount = 0;
+        const errors = [];
+        const transMapping = new Map();
+
+        // 2. Process rows
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const originalTransNo = row.trans_no || row.Transaction;
+            
+            try {
+                // Mapping names to IDs
+                const makerName = String(row.maker || row.Maker || '').toLowerCase().trim();
+                const categoryName = String(row.category || row.Category || '').toLowerCase().trim();
+                const powerLabel = String(row.power || row.Power || '').toLowerCase().trim();
+                
+                const maker_id = makerMap[makerName];
+                const category_id = categoryMap[categoryName];
+                const power_id = powerMap[powerLabel] || null;
+
+                if (!maker_id || !category_id) {
+                    throw new Error(`Invalid Maker (${row.Maker || row.maker}) or Category (${row.Category || row.category})`);
+                }
+
+                // Numbers
+                const qty = parseFloat(String(row.qty || row.Qty || 0).replace(/,/g, ''));
+                const rate = parseFloat(String(row.rate || row.Rate || 0).replace(/,/g, ''));
+                const amount = parseFloat(String(row.amount || row.Amount || row.total || row.Total || (qty * rate)).replace(/,/g, ''));
+
+                // Lot/SNo
+                const lot_no = row.lot || row.lot_no || row['Lot No'] || null;
+                const sno = row.sno || row.SNO || row.SNo || null;
+
+                // Duplicate Check (Lot/SNo)
+                if (lot_no && sno && sno !== '0' && sno !== '') {
+                    const [[conflict]] = await conn.query(
+                        `SELECT trans_no FROM stock_opening_balances WHERE lot_no = ? AND sno = ?`,
+                        [lot_no, sno]
+                    );
+                    if (conflict) {
+                        throw new Error(`Conflict: Lot #${lot_no} / SNo #${sno} already exists in ${conflict.trans_no}`);
+                    }
+                }
+
+                // Determine trans_no
+                let finalTransNo = '';
+                let seqData = null;
+
+                if (originalTransNo && originalTransNo !== '-' && transMapping.has(originalTransNo)) {
+                    const mapped = transMapping.get(originalTransNo);
+                    finalTransNo = mapped.trans_no;
+                    seqData = mapped;
+                } else {
+                    if (originalTransNo && originalTransNo !== '-') {
+                        const [[exists]] = await conn.query('SELECT trans_no FROM stock_opening_balances WHERE trans_no = ? LIMIT 1', [originalTransNo]);
+                        if (exists) throw new Error(`Transaction ${originalTransNo} already exists.`);
+                    }
+                    
+                    const txIdData = await genTransNo(conn, 'stock_opening_balances', 'OB', location_id, fiscal_year_id);
+                    finalTransNo = txIdData.trans_no;
+                    seqData = txIdData;
+                    if (originalTransNo && originalTransNo !== '-') {
+                        transMapping.set(originalTransNo, txIdData);
+                    }
+                }
+
+                // Dates
+                const transDate = parseCSVDate(row.date || row.Date) || new Date().toISOString().split('T')[0];
+                const mfgDate = parseCSVDate(row.mfg_date || row['Mfg Date']);
+                const expDate = parseCSVDate(row.exp_date || row['Exp Date']);
+
+                // Insert
+                await conn.query(`INSERT INTO stock_opening_balances 
+                    (trans_no, trans_date, maker_id, category_id, power_id, lot_no, sno, qty, rate, amount, location_id, fiscal_year_id, mfg_date, exp_date, sequence_no, location_code, fiscal_year_label, transaction_type) 
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, 
+                    [
+                        finalTransNo, transDate, maker_id, category_id, power_id, 
+                        lot_no, sno, qty, rate, amount, 
+                        location_id, fiscal_year_id, mfgDate, expDate,
+                        seqData.sequence_no, seqData.location_code, seqData.fiscal_year_label, seqData.transaction_type
+                    ]
+                );
+
+                successCount++;
+            } catch (err) {
+                failedCount++;
+                errors.push({ row: i + 1, error: err.message });
+            }
+        }
+
+        await conn.commit();
+        res.json({
+            success: true,
+            total: rows.length,
+            imported: successCount,
+            failed: failedCount,
+            errors: errors
+        });
+    } catch (err) {
+        if (conn) await conn.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
 router.get('/opening-balances/:id', async (req, res) => {
     try {
         const [[first]] = await db.query('SELECT trans_no FROM stock_opening_balances WHERE id = ?', [req.params.id]);

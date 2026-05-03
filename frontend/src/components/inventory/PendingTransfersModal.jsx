@@ -61,7 +61,7 @@ const PendingTransfersModal = ({ isOpen, onClose, currentUser, onAcknowledge, on
                 <table>
                     <thead>
                         <tr>
-                            <th>Maker</th><th>Category</th><th>Power</th><th>Stock Received</th>
+                            <th>Maker</th><th>Category</th><th>Power</th><th>Stock Request</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -70,7 +70,7 @@ const PendingTransfersModal = ({ isOpen, onClose, currentUser, onAcknowledge, on
                                 <td>${it.maker_name}</td>
                                 <td>${it.category_name}</td>
                                 <td>${it.power || '-'}</td>
-                                <td>${formatQty(it.stock_received || it.qty)}</td>
+                                <td>${formatQty(it.qty)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -182,7 +182,7 @@ const PendingTransfersModal = ({ isOpen, onClose, currentUser, onAcknowledge, on
                                                     <div>MAKER</div>
                                                     <div>CATEGORY</div>
                                                     <div className="text-center">POWER</div>
-                                                    <div className="text-right">STOCK RECEIVED</div>
+                                                    <div className="text-right">STOCK REQUEST</div>
                                                 </div>
 
                                                 {/* Dashed Line */}
@@ -195,7 +195,7 @@ const PendingTransfersModal = ({ isOpen, onClose, currentUser, onAcknowledge, on
                                                             <div style={{ fontWeight: 600 }}>{it.maker_name}</div>
                                                             <div>{it.category_name}</div>
                                                             <div className="text-center font-mono">{it.power || '-'}</div>
-                                                            <div className="text-right font-bold">{formatQty(it.stock_received || it.qty)}</div>
+                                                            <div className="text-right font-bold">{formatQty(it.qty)}</div>
                                                         </div>
                                                     ))}
                                                 </div>

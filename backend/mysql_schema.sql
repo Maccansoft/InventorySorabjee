@@ -391,7 +391,133 @@ CREATE TABLE IF NOT EXISTS `journal_entry_details` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
--- Final Constraints & Initial Seeds (Optional)
+-- 14. Transfer Tables
 -- --------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `transfer_requests` (
+    `id`                INT PRIMARY KEY AUTO_INCREMENT,
+    `trans_no`          VARCHAR(50) UNIQUE,
+    `trans_date`        DATE NOT NULL,
+    `location_id`       INT NOT NULL,
+    `from_location_id`  INT NULL,
+    `to_location_id`    INT NULL,
+    `stock_req_no`      VARCHAR(255) NULL,
+    `fiscal_year_id`    INT NOT NULL,
+    `user_id`           INT NOT NULL,
+    `total_qty`         DECIMAL(15,2) DEFAULT 0.00,
+    `status`            ENUM('PENDING','TRANSFERRED','TRANSFER','CANCELLED') DEFAULT 'PENDING',
+    `created_at`        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `notification_seen` TINYINT(4) DEFAULT 0,
+    `sequence_no`       INT DEFAULT 1,
+    `transaction_type`  VARCHAR(20) DEFAULT 'TRQ',
+    `location_code`     VARCHAR(20),
+    `fiscal_year_label` VARCHAR(50),
+    INDEX (`fiscal_year_id`),
+    INDEX (`user_id`),
+    INDEX (`location_id`),
+    CONSTRAINT `fk_trq_from_loc` FOREIGN KEY (`from_location_id`) REFERENCES `locations` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_trq_to_loc` FOREIGN KEY (`to_location_id`) REFERENCES `locations` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_trq_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trq_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trq_loc` FOREIGN KEY (`location_id`) REFERENCES `locations` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `transfer_request_details` (
+    `id`             INT PRIMARY KEY AUTO_INCREMENT,
+    `request_id`     INT NOT NULL,
+    `maker_id`       INT NOT NULL,
+    `category_id`    INT NOT NULL,
+    `power_id`       INT NULL,
+    `stock_received` DECIMAL(15,2) DEFAULT 0.00,
+    `stock_required` INT NOT NULL DEFAULT 0,
+    `qty`            DECIMAL(15,2) DEFAULT 0.00,
+    `qty_in_hand`    DECIMAL(15,2) DEFAULT 0.00,
+    INDEX (`request_id`),
+    INDEX (`maker_id`),
+    INDEX (`category_id`),
+    INDEX (`power_id`),
+    CONSTRAINT `fk_trq_det_header` FOREIGN KEY (`request_id`) REFERENCES `transfer_requests` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trq_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers` (`id`),
+    CONSTRAINT `fk_trq_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
+    CONSTRAINT `fk_trq_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `transfers` (
+    `id`                  INT PRIMARY KEY AUTO_INCREMENT,
+    `trans_no`            VARCHAR(50) UNIQUE,
+    `stock_req_no`        VARCHAR(255) NULL,
+    `trans_date`          DATE NOT NULL,
+    `from_location_id`    INT NULL,
+    `to_location_id`      INT NULL,
+    `total_amount`        DECIMAL(15,2) DEFAULT 0.00,
+    `fiscal_year_id`      INT NOT NULL,
+    `user_id`             INT NOT NULL,
+    `location_id`         INT NOT NULL,
+    `transfer_request_id` INT NULL,
+    `created_at`          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `sequence_no`         INT DEFAULT 1,
+    `transaction_type`    VARCHAR(20),
+    `location_code`       VARCHAR(20),
+    `fiscal_year_label`   VARCHAR(50),
+    INDEX (`from_location_id`),
+    INDEX (`to_location_id`),
+    INDEX (`fiscal_year_id`),
+    INDEX (`user_id`),
+    INDEX (`location_id`),
+    CONSTRAINT `fk_trn_req` FOREIGN KEY (`transfer_request_id`) REFERENCES `transfer_requests` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_trn_from_loc` FOREIGN KEY (`from_location_id`) REFERENCES `locations` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_trn_to_loc` FOREIGN KEY (`to_location_id`) REFERENCES `locations` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_trn_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trn_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trn_loc` FOREIGN KEY (`location_id`) REFERENCES `locations` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `transfer_details` (
+    `id`             INT PRIMARY KEY AUTO_INCREMENT,
+    `transfer_id`    INT NOT NULL,
+    `maker_id`       INT NOT NULL,
+    `category_id`    INT NOT NULL,
+    `power_id`       INT NULL,
+    `stock_required` INT NOT NULL DEFAULT 0,
+    `stock_req`      VARCHAR(255) NULL,
+    `barcode`        VARCHAR(100) NULL,
+    `lot_no`         VARCHAR(100) NULL,
+    `sno`            VARCHAR(100) NULL,
+    `serial_no`      VARCHAR(100) NULL,
+    `exp_date`       DATE NULL,
+    `mfg_date`       DATE NULL,
+    `qty`            DECIMAL(15,2) DEFAULT 0.00,
+    `qty_in_hand`    DECIMAL(15,2) DEFAULT 0.00,
+    `rate`           DECIMAL(15,2) DEFAULT 0.00,
+    `amount`         DECIMAL(15,2) DEFAULT 0.00,
+    INDEX (`transfer_id`),
+    INDEX (`maker_id`),
+    INDEX (`category_id`),
+    INDEX (`power_id`),
+    INDEX (`barcode`),
+    INDEX (`lot_no`),
+    CONSTRAINT `fk_trn_det_header` FOREIGN KEY (`transfer_id`) REFERENCES `transfers` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_trn_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers` (`id`),
+    CONSTRAINT `fk_trn_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
+    CONSTRAINT `fk_trn_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+-- 15. Barcode Setup
+-- --------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `barcode_format_setup` (
+    `id`             INT PRIMARY KEY AUTO_INCREMENT,
+    `format_type`    VARCHAR(100) NULL,
+    `maker_id`       INT NULL,
+    `sample_barcode` TEXT NULL,
+    `lot_no`         VARCHAR(100) NULL,
+    `sno`            VARCHAR(100) NULL,
+    `exp_date`       DATE NULL,
+    `mfg_years_less` INT DEFAULT 3,
+    `is_active`      BOOLEAN DEFAULT TRUE,
+    `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_bfs_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 COMMIT;
