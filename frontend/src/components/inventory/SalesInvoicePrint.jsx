@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { X, Printer, Download, FileText } from 'lucide-react';
 import ReactDOM from 'react-dom';
+import html2pdf from 'html2pdf.js';
 import { formatAmount, formatQty } from '../../utils/numberUtils';
 
 const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
@@ -68,6 +69,27 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
         window.print();
     };
 
+    const handleExportPDF = () => {
+        const element = document.getElementById('printable-invoice');
+        
+        // Hide elements with 'no-print' class during PDF generation
+        const opt = {
+            margin:       [10, 10, 10, 10], // top, left, buttom, right
+            filename:     `Invoice_${data.trans_no.replace(/[\/\\]/g, '_')}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { 
+                scale: 2, 
+                useCORS: true,
+                logging: false,
+                letterRendering: true
+            },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        // Generate and save the PDF
+        html2pdf().set(opt).from(element).save();
+    };
+
     const formatDate = (dateStr) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
@@ -83,7 +105,10 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                         <button onClick={handlePrint} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                             <Printer size={18} /> Print Invoice
                         </button>
-                        <button className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors">
+                        <button 
+                            onClick={handleExportPDF}
+                            className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
+                        >
                             <Download size={18} /> Export PDF
                         </button>
                     </div>

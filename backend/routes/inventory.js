@@ -356,6 +356,27 @@ router.post('/makers', async (req, res) => {
         const { name } = req.body;
         const [r] = await db.query('INSERT INTO makers (name) VALUES (?)', [name]);
         res.json({ id: r.insertId, name });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Maker already exists.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/makers/:id', async (req, res) => {
+    try {
+        const { name } = req.body;
+        await db.query('UPDATE makers SET name=? WHERE id=?', [name, req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Maker already exists.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/makers/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM makers WHERE id=?', [req.params.id]);
+        res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -408,21 +429,68 @@ router.get('/powers', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/suppliers', async (req, res) => {
+router.post('/powers', async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM suppliers ORDER BY name');
-        res.json(rows);
+        const { power } = req.body;
+        const [r] = await db.query('INSERT INTO powers (power) VALUES (?)', [power]);
+        res.json({ id: r.insertId, power });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Power rating already exists.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/powers/:id', async (req, res) => {
+    try {
+        const { power } = req.body;
+        await db.query('UPDATE powers SET power=? WHERE id=?', [power, req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Power rating already exists.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/powers/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM powers WHERE id=?', [req.params.id]);
+        res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/customers', async (req, res) => {
+router.post('/powers/import', async (req, res) => {
     try {
-        const { location_id, role, is_head_office } = req.user;
-        let sql = 'SELECT * FROM customers';
+        const { powers } = req.body;
+        if (!powers || !powers.length) return res.status(400).json({ error: 'No powers provided' });
+
+        let inserted = 0;
+        let skipped = 0;
+
+        for (const p of powers) {
+            try {
+                await db.query('INSERT INTO powers (power) VALUES (?)', [p.power.toUpperCase()]);
+                inserted++;
+            } catch (err) {
+                if (err.code === 'ER_DUP_ENTRY') skipped++;
+                else throw err;
+            }
+        }
+        res.json({ inserted, skipped });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/suppliers', async (req, res) => {
+    try {
+        const { location_id: userLocId, role, is_head_office } = req.user;
+        let location_id = req.query.location_id;
+        
+        let sql = 'SELECT * FROM suppliers';
         let params = [];
 
-        // Strict filtering: show only customers belonging to the current location
         if (role !== 'SUPER_ADMIN' || !is_head_office) {
+            sql += ' WHERE location_id = ?';
+            params.push(userLocId);
+        } else if (location_id && location_id !== 'ALL') {
             sql += ' WHERE location_id = ?';
             params.push(location_id);
         }
@@ -430,6 +498,322 @@ router.get('/customers', async (req, res) => {
         sql += ' ORDER BY name';
         const [rows] = await db.query(sql, params);
         res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/suppliers', async (req, res) => {
+    try {
+        const { name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id } = req.body;
+        const [r] = await db.query(
+            'INSERT INTO suppliers (name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id]
+        );
+        const supplierId = r.insertId;
+
+        // Auto-create account
+        await autoCreateSupplierAccount(name, location_id);
+
+        res.json({ id: supplierId, ...req.body });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/suppliers/:id', async (req, res) => {
+    try {
+        const { name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id } = req.body;
+        
+        // Fetch old name before update for account sync
+        const [[oldSup]] = await db.query('SELECT name FROM suppliers WHERE id = ?', [req.params.id]);
+
+        await db.query(
+            'UPDATE suppliers SET name=?, contact_person=?, mobile=?, phone=?, fax=?, email=?, address=?, ntn=?, gst=?, location_id=? WHERE id=?',
+            [name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id, req.params.id]
+        );
+
+        if (oldSup) {
+            await autoUpdateAccountName(oldSup.name, name, 'ACCOUNT PAYABLES', location_id);
+        }
+
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/suppliers/:id', async (req, res) => {
+    try {
+        // Fetch details before deletion for account sync
+        const [[supplier]] = await db.query('SELECT name, location_id FROM suppliers WHERE id = ?', [req.params.id]);
+        
+        await db.query('DELETE FROM suppliers WHERE id=?', [req.params.id]);
+        
+        if (supplier) {
+            await autoDeleteAccount(supplier.name, 'ACCOUNT PAYABLES', supplier.location_id);
+        }
+        
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/suppliers/import', async (req, res) => {
+    try {
+        const { suppliers } = req.body;
+        if (!suppliers || !suppliers.length) return res.status(400).json({ error: 'No suppliers provided' });
+
+        for (const s of suppliers) {
+            await db.query(
+                'INSERT INTO suppliers (name, contact_person, mobile, phone, email, address, ntn, gst, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [s.name.toUpperCase(), s.contact_person.toUpperCase(), s.mobile, s.phone, s.email, s.address, s.ntn, s.gst, s.location_id]
+            );
+            // Auto-create account for each imported supplier
+            await autoCreateSupplierAccount(s.name, s.location_id);
+        }
+        res.json({ success: true, count: suppliers.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/customers', async (req, res) => {
+    try {
+        const { location_id: userLocId, role, is_head_office } = req.user;
+        let location_id = req.query.location_id;
+        
+        let sql = 'SELECT * FROM customers';
+        let params = [];
+
+        if (role !== 'SUPER_ADMIN' || !is_head_office) {
+            sql += ' WHERE location_id = ?';
+            params.push(userLocId);
+        } else if (location_id && location_id !== 'ALL') {
+            sql += ' WHERE location_id = ?';
+            params.push(location_id);
+        }
+
+        sql += ' ORDER BY name';
+        const [rows] = await db.query(sql, params);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 🎯 Helper: Automatically create a child account for a customer under ACCOUNT RECEIVABLES
+async function autoCreateCustomerAccount(name, location_id) {
+    try {
+        const customerName = (name || '').toUpperCase().trim();
+        if (!customerName) return;
+
+        // 1. Find the ACCOUNT RECEIVABLES parent account dynamically
+        const [[receivablesParent]] = await db.query(
+            "SELECT id, account_code, account_type, level FROM chart_of_accounts WHERE account_name = 'ACCOUNT RECEIVABLES' LIMIT 1"
+        );
+
+        if (!receivablesParent) {
+            console.warn('[AutoAccountCreation] "ACCOUNT RECEIVABLES" parent account not found in Chart of Accounts.');
+            return;
+        }
+
+        const parentId = receivablesParent.id;
+
+        // 2. Check for duplicate account in this location context
+        const [[existingAcc]] = await db.query(
+            'SELECT id FROM chart_of_accounts WHERE account_name = ? AND parent_id = ? AND location_id = ?',
+            [customerName, parentId, location_id]
+        );
+
+        if (existingAcc) return; // Skip if already exists
+
+        // 3. Generate Next Account Code (Pattern: ParentCode-Sequence)
+        const [[{ maxSeq }]] = await db.query(
+            "SELECT MAX(CAST(SUBSTRING_INDEX(account_code, '-', -1) AS UNSIGNED)) as maxSeq FROM chart_of_accounts WHERE parent_id = ?",
+            [parentId]
+        );
+        const nextSeq = (maxSeq || 0) + 1;
+        const nextCode = `${receivablesParent.account_code}-${nextSeq}`;
+
+        // 4. Insert the new child account
+        await db.query(
+            `INSERT INTO chart_of_accounts 
+            (account_code, account_name, parent_id, account_type, level, is_main, is_active, statement_type, location_id) 
+            VALUES (?, ?, ?, ?, ?, 0, 1, 'BALANCE_SHEET', ?)`,
+            [nextCode, customerName, parentId, receivablesParent.account_type, receivablesParent.level + 1, location_id]
+        );
+    } catch (err) {
+        console.error('[AutoAccountCreation] Error for:', name, err.message);
+    }
+}
+
+// 🎯 Helper: Automatically create a child account for a supplier under ACCOUNT PAYABLES
+async function autoCreateSupplierAccount(name, location_id) {
+    try {
+        const supplierName = (name || '').toUpperCase().trim();
+        if (!supplierName) return;
+
+        // 1. Find the ACCOUNT PAYABLES parent account dynamically
+        const [[payablesParent]] = await db.query(
+            "SELECT id, account_code, account_type, level FROM chart_of_accounts WHERE account_name = 'ACCOUNT PAYABLES' LIMIT 1"
+        );
+
+        if (!payablesParent) {
+            console.warn('[AutoAccountCreation] "ACCOUNT PAYABLES" parent account not found in Chart of Accounts.');
+            return;
+        }
+
+        const parentId = payablesParent.id;
+
+        // 2. Check for duplicate account in this location context
+        const [[existingAcc]] = await db.query(
+            'SELECT id FROM chart_of_accounts WHERE account_name = ? AND parent_id = ? AND location_id = ?',
+            [supplierName, parentId, location_id]
+        );
+
+        if (existingAcc) return; // Skip if already exists
+
+        // 3. Generate Next Account Code (Pattern: ParentCode-Sequence)
+        const [[{ maxSeq }]] = await db.query(
+            "SELECT MAX(CAST(SUBSTRING_INDEX(account_code, '-', -1) AS UNSIGNED)) as maxSeq FROM chart_of_accounts WHERE parent_id = ?",
+            [parentId]
+        );
+        const nextSeq = (maxSeq || 0) + 1;
+        const nextCode = `${payablesParent.account_code}-${nextSeq}`;
+
+        // 4. Insert the new child account
+        await db.query(
+            `INSERT INTO chart_of_accounts 
+            (account_code, account_name, parent_id, account_type, level, is_main, is_active, statement_type, location_id) 
+            VALUES (?, ?, ?, ?, ?, 0, 1, 'BALANCE_SHEET', ?)`,
+            [nextCode, supplierName, parentId, payablesParent.account_type, payablesParent.level + 1, location_id]
+        );
+    } catch (err) {
+        console.error('[AutoAccountCreation] Error for supplier:', name, err.message);
+    }
+}
+
+// 🎯 Helper: Automatically delete a child account if it has no dependencies
+async function autoDeleteAccount(name, parentName, location_id) {
+    try {
+        const accountName = (name || '').toUpperCase().trim();
+        if (!accountName) return;
+
+        // 1. Find parent and account
+        const [[parent]] = await db.query("SELECT id FROM chart_of_accounts WHERE account_name = ? LIMIT 1", [parentName]);
+        if (!parent) return;
+
+        const [[account]] = await db.query(
+            "SELECT id FROM chart_of_accounts WHERE account_name = ? AND parent_id = ? AND location_id = ?",
+            [accountName, parent.id, location_id]
+        );
+
+        if (!account) return;
+
+        // 2. Dependency Safety Check
+        const [[{ vCount }]] = await db.query("SELECT COUNT(*) as vCount FROM voucher_entries WHERE account_id = ?", [account.id]);
+        const [[{ jCount }]] = await db.query("SELECT COUNT(*) as jCount FROM journal_entry_details WHERE account_id = ?", [account.id]);
+        const [[{ oCount }]] = await db.query("SELECT COUNT(*) as oCount FROM opening_balances WHERE account_id = ?", [account.id]);
+
+        if (vCount > 0 || jCount > 0 || oCount > 0) {
+            console.warn(`[AutoDeleteAccount] Skipping deletion of account "${accountName}" as it has existing transactions/balances.`);
+            return;
+        }
+
+        // 3. Safe to delete
+        await db.query("DELETE FROM chart_of_accounts WHERE id = ?", [account.id]);
+    } catch (err) {
+        console.error(`[AutoDeleteAccount] Error for ${name}:`, err.message);
+    }
+}
+
+// 🎯 Helper: Automatically update (rename) an account name if it matches old name
+async function autoUpdateAccountName(oldName, newName, parentName, location_id) {
+    try {
+        const oldAccName = (oldName || '').toUpperCase().trim();
+        const newAccName = (newName || '').toUpperCase().trim();
+
+        if (!oldAccName || !newAccName || oldAccName === newAccName) return;
+
+        // 1. Find parent
+        const [[parent]] = await db.query("SELECT id FROM chart_of_accounts WHERE account_name = ? LIMIT 1", [parentName]);
+        if (!parent) return;
+
+        // 2. Check for duplicate of the NEW name in same location context
+        const [[duplicate]] = await db.query(
+            "SELECT id FROM chart_of_accounts WHERE account_name = ? AND parent_id = ? AND location_id = ?",
+            [newAccName, parent.id, location_id]
+        );
+        if (duplicate) {
+            console.warn(`[AutoUpdateAccount] Rename skipped: Target name "${newAccName}" already exists under ${parentName}.`);
+            return;
+        }
+
+        // 3. Perform the rename
+        await db.query(
+            "UPDATE chart_of_accounts SET account_name = ? WHERE account_name = ? AND parent_id = ? AND location_id = ?",
+            [newAccName, oldAccName, parent.id, location_id]
+        );
+    } catch (err) {
+        console.error(`[AutoUpdateAccount] Error updating ${oldName} to ${newName}:`, err.message);
+    }
+}
+
+router.post('/customers', async (req, res) => {
+    try {
+        const { name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id } = req.body;
+        const [r] = await db.query(
+            'INSERT INTO customers (name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id]
+        );
+        const customerId = r.insertId;
+
+        // Auto-create account
+        await autoCreateCustomerAccount(name, location_id);
+
+        res.json({ id: customerId, ...req.body });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/customers/:id', async (req, res) => {
+    try {
+        const { name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id } = req.body;
+
+        // Fetch old name before update for account sync
+        const [[oldCust]] = await db.query('SELECT name FROM customers WHERE id = ?', [req.params.id]);
+
+        await db.query(
+            'UPDATE customers SET name=?, contact_person=?, mobile=?, phone=?, fax=?, email=?, address=?, ntn=?, gst=?, location_id=? WHERE id=?',
+            [name, contact_person, mobile, phone, fax, email, address, ntn, gst, location_id, req.params.id]
+        );
+
+        if (oldCust) {
+            await autoUpdateAccountName(oldCust.name, name, 'ACCOUNT RECEIVABLES', location_id);
+        }
+
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/customers/:id', async (req, res) => {
+    try {
+        // Fetch details before deletion for account sync
+        const [[customer]] = await db.query('SELECT name, location_id FROM customers WHERE id = ?', [req.params.id]);
+
+        await db.query('DELETE FROM customers WHERE id=?', [req.params.id]);
+
+        if (customer) {
+            await autoDeleteAccount(customer.name, 'ACCOUNT RECEIVABLES', customer.location_id);
+        }
+
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/customers/import', async (req, res) => {
+    try {
+        const { customers } = req.body;
+        if (!customers || !customers.length) return res.status(400).json({ error: 'No customers provided' });
+
+        for (const c of customers) {
+            await db.query(
+                'INSERT INTO customers (name, contact_person, mobile, phone, email, address, ntn, gst, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [c.name.toUpperCase(), c.contact_person.toUpperCase(), c.mobile, c.phone, c.email, c.address, c.ntn, c.gst, c.location_id]
+            );
+            // Auto-create account for each imported customer
+            await autoCreateCustomerAccount(c.name, c.location_id);
+        }
+        res.json({ success: true, count: customers.length });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
