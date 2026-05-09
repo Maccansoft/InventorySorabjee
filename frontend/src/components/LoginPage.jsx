@@ -12,15 +12,21 @@ const LoginPage = ({ onLogin }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const [companyName, setCompanyName] = useState('');
+
     useEffect(() => {
         const fetchDropdowns = async () => {
             try {
-                const [locRes, fyRes] = await Promise.all([
+                const [locRes, fyRes, compRes] = await Promise.all([
                     axios.get(`${API}/auth/locations`),
-                    axios.get(`${API}/auth/fiscal-years`)
+                    axios.get(`${API}/auth/fiscal-years`),
+                    axios.get(`${API}/company`)
                 ]);
                 setLocations(Array.isArray(locRes.data) ? locRes.data : []);
                 setFiscalYears(Array.isArray(fyRes.data) ? fyRes.data : []);
+                if (compRes.data && compRes.data.CompanyName) {
+                    setCompanyName(compRes.data.CompanyName);
+                }
                 // Pre-select first active fiscal year
                 if (Array.isArray(fyRes.data)) {
                     const activeFY = fyRes.data.find(fy => !fy.is_closed);
@@ -129,7 +135,7 @@ const LoginPage = ({ onLogin }) => {
                 <div className="login-form-panel">
                     <div className="login-form-box">
                         <div className="login-form-header">
-                            <h2>Welcome Back</h2>
+                            <h2 className="login-brand-heading">{companyName || "Welcome Back"}</h2>
                             <p>Sign in to access your account</p>
                         </div>
 

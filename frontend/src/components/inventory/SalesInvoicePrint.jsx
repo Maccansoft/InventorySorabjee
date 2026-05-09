@@ -71,19 +71,19 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
 
     const handleExportPDF = () => {
         const element = document.getElementById('printable-invoice');
-        
+
         // Hide elements with 'no-print' class during PDF generation
         const opt = {
-            margin:       [10, 10, 10, 10], // top, left, buttom, right
-            filename:     `Invoice_${data.trans_no.replace(/[\/\\]/g, '_')}.pdf`,
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { 
-                scale: 2, 
+            margin: [10, 10, 10, 10], // top, left, buttom, right
+            filename: `Invoice_${data.trans_no.replace(/[\/\\]/g, '_')}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+                scale: 2,
                 useCORS: true,
                 logging: false,
                 letterRendering: true
             },
-            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
         // Generate and save the PDF
@@ -105,7 +105,7 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                         <button onClick={handlePrint} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                             <Printer size={18} /> Print Invoice
                         </button>
-                        <button 
+                        <button
                             onClick={handleExportPDF}
                             className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
                         >
@@ -175,14 +175,14 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                         <thead>
                             <tr>
                                 <th width="35" className="th-salmon">S.NO</th>
-                                <th className="th-gray">DESCRIPTION</th>
-                                <th width="45" className="th-gray">QTY</th>
+                                <th width="220" className="th-gray">DESCRIPTION</th>
+                                <th width="40" className="th-gray">QTY</th>
                                 <th width="80" className="th-gray">LOT NO</th>
                                 <th width="80" className="th-gray">MFG DATE</th>
                                 <th width="80" className="th-gray">EXP DATE</th>
-                                <th width="90" className="th-gray text-center">UNIT PRICE</th>
-                                <th width="80" className="th-gray text-center">QUANTITY</th>
-                                <th width="110" className="th-red text-center">TOTAL</th>
+                                <th width="60" className="th-gray text-center">UNIT PRICE</th>
+                                <th width="40" className="th-gray text-center">QTY</th>
+                                <th width="70" className="th-red text-center">TOTAL</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -238,7 +238,7 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                             <span className="total-label">Total Qty:</span>
                             <span className="total-value">{formatQty(data.details.reduce((s, d) => s + parseFloat(d.qty), 0))}</span>
                         </div>
-                         <div className="totals-row">
+                        <div className="totals-row">
                             <span className="total-label">Gross Total:</span>
                             <span className="total-value">{formatAmount(invoiceGrossTotal)}</span>
                         </div>
@@ -269,8 +269,8 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
 
                     {/* Sub Footer */}
                     <div className="sub-footer-attribution">
-                        <p>Prepared By: Tariq ullah khan & Approved By: Nadeem Habib</p>
-                        <p>© Copyright SorabJeePatel. All Rights Reserved.</p>
+                        <p>Application Authorized to: SORABJEE PATEL & CO.</p>
+                        <p>© Copyright Maccansoft Corporation. All Rights Reserved.</p>
                     </div>
                 </div>
 

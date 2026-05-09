@@ -232,6 +232,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 const { data } = await axios.get(`${API}/get-category-rate/${val}`);
                 if (data && data.rate !== undefined) {
                     newDetails[idx].rate = data.rate;
+                    // Mirror A.Rate to P.Rate for Sales Invoice
+                    newDetails[idx].p_rate = data.rate;
                     newDetails[idx].amount = Math.round(parseFloat(newDetails[idx].qty || 0) * parseFloat(data.rate));
                     calculateTotals(newDetails);
                 }
@@ -277,6 +279,11 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 const r = val === '' ? '' : parseFloat(val || 0);
                 newDetails[idx].rate = r;
                 newDetails[idx].amount = Math.round(q * (parseFloat(r) || 0));
+
+                // Mirror A.Rate to P.Rate for Sales Invoice
+                if (type === 'SALES_INVOICE') {
+                    newDetails[idx].p_rate = r;
+                }
             }
             if (field === 'amount') {
                 newDetails[idx].amount = val === '' ? '' : parseFloat(val || 0);

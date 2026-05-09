@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   BarChart3, TrendingUp, TrendingDown, PieChart,
-  FileText, Search, Plus, Menu, Box,
+  FileText, Plus, Menu, Box,
   CreditCard, Wallet, BookOpen, Scale, Activity,
   ArrowDownCircle, ArrowUpCircle, BookMarked,
   Users, Calendar, MapPin, LogOut, Settings, ChevronDown,
@@ -432,10 +432,8 @@ const App = () => {
           <button className="nav-icon-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
             <Menu size={20} />
           </button>
-          <div className="search-bar-container">
-            <Search className="search-icon" size={18} />
-            <input type="text" placeholder="Search accounts…" className="search-input"
-              value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          <div className="company-branding">
+            <h1 className="company-name-display">{companyInfo?.CompanyName || 'FA SYSTEM'}</h1>
           </div>
 
           {/* Session info bar */}
