@@ -31,7 +31,7 @@ app.use('/api/vouchers', authMiddleware, voucherRoutes);
 app.use('/api/ledger', authMiddleware, ledgerRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/journal', authMiddleware, journalRoutes);
-app.use('/api/company', authMiddleware, companyRoutes);
+app.use('/api/company', companyRoutes);
 app.use('/api/users', authMiddleware, usersRoutes);
 app.use('/api/locations', authMiddleware, locationsRoutes);
 app.use('/api/fiscal-years', authMiddleware, fiscalYearRoutes);
