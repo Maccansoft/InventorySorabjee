@@ -1,0 +1,40 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+          script: |
+            set -e
+
+            echo "➡️ Moving to project directory"
+            cd /home/super/InventorySorabjee
+
+            echo "➡️ Updating code from GitHub"
+            git reset --hard
+            git pull origin main
+
+            echo "➡️ Installing dependencies"
+            npm install
+
+            echo "➡️ Building project"
+            npm run build
+
+            echo "➡️ Restarting application with PM2"
+            pm2 reload fasystem-api
+
+            echo "✅ Deployment completed successfully"
