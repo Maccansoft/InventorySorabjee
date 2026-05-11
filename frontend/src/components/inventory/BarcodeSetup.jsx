@@ -46,24 +46,49 @@ const BarcodeSetup = ({ isFYClosed }) => {
             const payload = {
                 ...formData,
                 format_type: (formData.format_type || '').trim(),
-                maker: (formData.maker || '').trim(),
                 sample_barcode: (formData.sample_barcode || '').trim(),
                 lot_no: (formData.lot_no || '').trim(),
                 sno: (formData.sno || '').trim()
             };
-            await axios.post(`${API}/barcode-setup`, payload);
+
+            if (editId) {
+                await axios.put(`${API}/barcode-setup/${editId}`, payload);
+            } else {
+                await axios.post(`${API}/barcode-setup`, payload);
+            }
+
             fetchData();
-            setFormData({ format_type: '', maker_id: '', sample_barcode: '', lot_no: '', sno: '', exp_date: '', mfg_years_less: 3, is_active: 1 });
-            alert("Saved successfully!");
+            resetForm();
+            alert(editId ? "Updated successfully!" : "Saved successfully!");
         } catch (e) { alert(e.response?.data?.error || "Save error"); }
         finally { setLoading(false); }
+    };
+
+    const handleEdit = (r) => {
+        setEditId(r.id);
+        setFormData({
+            format_type: r.format_type || '',
+            maker_id: r.maker_id || '',
+            sample_barcode: r.sample_barcode || '',
+            lot_no: r.lot_no || '',
+            sno: r.sno || '',
+            exp_date: r.exp_date ? r.exp_date.split('T')[0] : '',
+            mfg_years_less: r.mfg_years_less || 3,
+            is_active: r.is_active
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const resetForm = () => {
+        setEditId(null);
+        setFormData({ format_type: '', maker_id: '', sample_barcode: '', lot_no: '', sno: '', exp_date: '', mfg_years_less: 3, is_active: 1 });
     };
 
     const handleDelete = async (id) => {
         if (isFYClosed || !window.confirm("Are you sure?")) return;
         try {
             await axios.delete(`${API}/barcode-setup/${id}`);
-            fetchRecords();
+            fetchData();
         } catch (e) { alert("Delete error"); }
     };
 
@@ -136,8 +161,13 @@ const BarcodeSetup = ({ isFYClosed }) => {
                             Is Active
                         </label>
                         <button type="submit" className="btn-primary" disabled={loading || isFYClosed} style={{ width: '100%', height: 42 }}>
-                            <Save size={18} /> {loading ? "Saving..." : "Save Configuration"}
+                            <Save size={18} /> {loading ? (editId ? "Updating..." : "Saving...") : (editId ? "Update Configuration" : "Save Configuration")}
                         </button>
+                        {editId && (
+                            <button type="button" onClick={resetForm} style={{ ...inputStyle, background: '#f1f5f9', color: '#64748b', cursor: 'pointer', height: 42 }}>
+                                <X size={18} /> Cancel
+                            </button>
+                        )}
                     </div>
                 </form>
             </div>
@@ -177,7 +207,10 @@ const BarcodeSetup = ({ isFYClosed }) => {
                                         {r.is_active ? "ACTIVE" : "INACTIVE"}
                                     </span>
                                 </td>
-                                <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                                <td style={{ padding: '16px 20px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                                    <button onClick={() => handleEdit(r)} disabled={isFYClosed} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: 6 }}>
+                                        <Edit2 size={16} />
+                                    </button>
                                     <button onClick={() => handleDelete(r.id)} disabled={isFYClosed} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 6 }}>
                                         <Trash2 size={16} />
                                     </button>

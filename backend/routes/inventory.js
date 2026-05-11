@@ -204,6 +204,21 @@ router.post('/barcode-setup', async (req, res) => {
     }
 });
 
+router.put('/barcode-setup/:id', async (req, res) => {
+    try {
+        const { format_type, maker_id, sample_barcode, lot_no, sno, exp_date, mfg_years_less, is_active } = req.body;
+        await db.query(`
+            UPDATE barcode_format_setup 
+            SET format_type=?, maker_id=?, sample_barcode=?, lot_no=?, sno=?, exp_date=?, mfg_years_less=?, is_active=?
+            WHERE id=?
+        `, [
+            (format_type || '').trim(), maker_id, (sample_barcode || '').trim(), (lot_no || '').trim(), (sno || '').trim(),
+            exp_date || null, mfg_years_less || 3, is_active, req.params.id
+        ]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/barcode-setup/:id', async (req, res) => {
     try {
         await db.query('DELETE FROM barcode_format_setup WHERE id = ?', [req.params.id]);
@@ -272,11 +287,30 @@ router.get('/barcode-lookup', async (req, res) => {
                         const expPos = cleanSample.indexOf(p);
                         if (expPos !== -1 && cleanVal.length >= (expPos + 6)) {
                             const rawExp = cleanVal.substring(expPos, expPos + 6);
-                            // Convert extracted YYMMDD back to ISO
-                            const eY = parseInt(rawExp.substring(0, 2)) > 50 ? `19${rawExp.substring(0, 2)}` : `20${rawExp.substring(0, 2)}`;
-                            const eM = rawExp.substring(2, 4);
-                            const eD = rawExp.substring(4, 6);
-                            foundExp = `${eY}-${eM}-${eD}`;
+                            let eY, eM, eD;
+
+                            // Fix for IRIS: Correctly identify date parts based on which pattern matched
+                            if (s.maker_name.toUpperCase() === 'IRIS') {
+                                if (p === `${dd}${mm}${yy}`) {
+                                    // Pattern was DDMMYY
+                                    eD = rawExp.substring(0, 2);
+                                    eM = rawExp.substring(2, 4);
+                                    eY = rawExp.substring(4, 6);
+                                } else {
+                                    // Pattern was YYMMDD
+                                    eY = rawExp.substring(0, 2);
+                                    eM = rawExp.substring(2, 4);
+                                    eD = rawExp.substring(4, 6);
+                                }
+                            } else {
+                                // Default legacy logic for other makers to avoid regression
+                                eY = rawExp.substring(0, 2);
+                                eM = rawExp.substring(2, 4);
+                                eD = rawExp.substring(4, 6);
+                            }
+
+                            const fullY = parseInt(eY) > 50 ? `19${eY}` : `20${eY}`;
+                            foundExp = `${fullY}-${eM}-${eD}`;
                             break;
                         }
                     }
