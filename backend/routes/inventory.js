@@ -1196,7 +1196,6 @@ const createTxEndPoints = (config) => {
     });
 };
 
-txConfigs.forEach(createTxEndPoints);
 
 // ── PROFESSIONAL SALES INVOICE PRINTING ──
 router.get('/sales/print/:id', async (req, res) => {
@@ -1230,6 +1229,79 @@ router.get('/sales/print/:id', async (req, res) => {
         res.json({ ...headers[0], details });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── BULK SALES INVOICE PRINTING ──
+router.get('/sales/print-bulk', async (req, res) => {
+    try {
+        const { ids, fromNo, toNo, transNos, location_id, fiscal_year_id } = req.query;
+        let idList = [];
+
+        if (ids) {
+            idList = ids.split(',').map(id => parseInt(id)).filter(id => !isNaN(id));
+        } else if (transNos) {
+            const nos = transNos.split(',').map(n => n.trim()).filter(n => n);
+            if (nos.length > 0) {
+                const [rows] = await db.query(
+                    `SELECT id FROM sales WHERE trans_no IN (?)`,
+                    [nos]
+                );
+                idList = rows.map(r => r.id);
+            }
+        } else if (fromNo && toNo) {
+            const [rows] = await db.query(
+                `SELECT id FROM sales 
+                 WHERE location_id = ? AND fiscal_year_id = ? 
+                 AND trans_no BETWEEN ? AND ?
+                 ORDER BY trans_no ASC`,
+                [location_id, fiscal_year_id, fromNo.trim(), toNo.trim()]
+            );
+            idList = rows.map(r => r.id);
+        }
+
+        if (idList.length === 0) return res.status(404).json({ error: 'No invoices found for the given selection.' });
+
+        const [headers] = await db.query(`
+            SELECT s.*, c.name as customer_name, c.address as customer_address, c.mobile as customer_mobile
+            FROM sales s 
+            LEFT JOIN customers c ON s.customer_id = c.id 
+            WHERE s.id IN (?)
+            ORDER BY s.trans_no ASC
+        `, [idList]);
+
+        const [details] = await db.query(`
+            SELECT 
+                d.*, 
+                m.name as maker_name, 
+                cat.name as category_name, 
+                cat.description as category_description,
+                p.power,
+                SUM(d.qty) OVER(PARTITION BY d.sale_id, d.maker_id, d.category_id, d.power_id) as group_total_qty,
+                SUM(d.amount) OVER(PARTITION BY d.sale_id, d.maker_id, d.category_id, d.power_id) as group_total_amount
+            FROM sales_details d
+            JOIN makers m ON d.maker_id = m.id
+            JOIN categories cat ON d.category_id = cat.id
+            LEFT JOIN powers p ON d.power_id = p.id
+            WHERE d.sale_id IN (?)
+            ORDER BY d.sale_id, d.id ASC
+        `, [idList]);
+
+        const detailsBySaleId = details.reduce((acc, d) => {
+            if (!acc[d.sale_id]) acc[d.sale_id] = [];
+            acc[d.sale_id].push(d);
+            return acc;
+        }, {});
+
+        const result = headers.map(h => ({
+            ...h,
+            details: detailsBySaleId[h.id] || []
+        }));
+
+        res.json(result);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+txConfigs.forEach(createTxEndPoints);
+
 
 // OPENING BALANCES (Specific logic)
 router.get('/opening-balances', async (req, res) => {

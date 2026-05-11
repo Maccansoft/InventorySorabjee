@@ -4,6 +4,8 @@ import { TrendingUp, TrendingDown, Printer, FileText } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
 import ExportModal from './common/ExportModal';
 
+import SearchableSelect from './common/SearchableSelect';
+
 const API = '/api';
 
 const LedgerView = ({ accounts, fromDate, toDate, locationId, fiscalYearId, companyInfo, reportMeta }) => {
@@ -23,6 +25,13 @@ const LedgerView = ({ accounts, fromDate, toDate, locationId, fiscalYearId, comp
         return result.sort((a, b) => a.account_code.localeCompare(b.account_code));
     };
     const allAccounts = flattenAccounts(accounts);
+    
+    // Prepare options for SearchableSelect
+    const accountOptions = allAccounts.map(a => ({
+        value: a.id,
+        label: `${a.account_code} – ${a.account_name}`,
+        level: a.level
+    }));
 
     const fetchLedger = async (id) => {
         if (!id) return;
@@ -55,18 +64,14 @@ const LedgerView = ({ accounts, fromDate, toDate, locationId, fiscalYearId, comp
             <div className="ledger-report-card" style={{ marginBottom: 24 }}>
                 <div className="report-header">
                     <h2>Account Ledger</h2>
-                    <select
-                        value={selectedAccountId}
-                        onChange={e => setSelectedAccountId(e.target.value)}
-                        style={{ fontSize: '0.875rem', padding: '8px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', outline: 'none', minWidth: 280 }}
-                    >
-                        <option value="">— Select Account —</option>
-                        {allAccounts.map(a => (
-                            <option key={a.id} value={a.id}>
-                                {'—'.repeat(a.level - 1)}{a.account_code} – {a.account_name}
-                            </option>
-                        ))}
-                    </select>
+                    <div style={{ minWidth: 320 }}>
+                        <SearchableSelect
+                            options={accountOptions}
+                            value={selectedAccountId}
+                            onChange={(val) => setSelectedAccountId(val)}
+                            placeholder="Select Account"
+                        />
+                    </div>
                 </div>
             </div>
 

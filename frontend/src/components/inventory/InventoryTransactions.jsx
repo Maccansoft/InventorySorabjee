@@ -8,6 +8,8 @@ import ExportModal from '../common/ExportModal';
 import ImportModal from '../common/ImportModal';
 import StockTransactionForm from './StockTransactionForm';
 import SalesInvoicePrint from './SalesInvoicePrint';
+import BulkPrintModal from './BulkPrintModal';
+import BulkSalesInvoicePrint from './BulkSalesInvoicePrint';
 
 const API = '/api/inventory';
 
@@ -49,6 +51,8 @@ const InventoryTransactions = ({
     const [importModal, setImportModal] = useState(false);
     const [showPrint, setShowPrint] = useState(null); // stores invoice ID
     const [filterLocationId, setFilterLocationId] = useState(viewLocationId);
+    const [bulkPrintModal, setBulkPrintModal] = useState(false);
+    const [bulkPrintSelection, setBulkPrintSelection] = useState(null);
     
     const isTransfer = activeFilter === 'TRANSFER';
     const isTrq = activeFilter === 'TRANSFER_REQUEST';
@@ -288,6 +292,24 @@ const InventoryTransactions = ({
                         {initialType !== 'ALL' && !isFYClosed && activeFilter !== 'TRANSFER' && (
                             <button className="btn-primary" onClick={() => setActiveForm(activeFilter)}>
                                 <Plus size={16} /> New {currentTypeInfo?.label}
+                            </button>
+                        )}
+                        {activeFilter === 'SALES_INVOICE' && (
+                            <button 
+                                className="btn-secondary" 
+                                style={{ 
+                                    padding: '6px 12px', 
+                                    height: 36, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 6,
+                                    background: '#ecfdf5',
+                                    color: '#059669',
+                                    border: '1px solid #10b981'
+                                }}
+                                onClick={() => setBulkPrintModal(true)}
+                            >
+                                <Printer size={15} /> Print Multiple Invoices
                             </button>
                         )}
                         {initialType === 'ALL' && (
@@ -638,6 +660,27 @@ const InventoryTransactions = ({
                     invoiceId={showPrint}
                     companyInfo={companyInfo}
                     onClose={() => setShowPrint(null)}
+                />
+            )}
+
+            {bulkPrintModal && (
+                <BulkPrintModal
+                    isOpen={bulkPrintModal}
+                    onClose={() => setBulkPrintModal(false)}
+                    currentUser={currentUser}
+                    onConfirm={(selection) => {
+                        setBulkPrintModal(false);
+                        setBulkPrintSelection(selection);
+                    }}
+                />
+            )}
+
+            {bulkPrintSelection && (
+                <BulkSalesInvoicePrint
+                    selection={bulkPrintSelection}
+                    companyInfo={companyInfo}
+                    currentUser={currentUser}
+                    onClose={() => setBulkPrintSelection(null)}
                 />
             )}
 

@@ -26,8 +26,9 @@ async function syncInventoryToLedger(conn, {
     }
 
     // 0. Check Fiscal Year
-    const [[fy]] = await conn.query('SELECT is_closed FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
+    const [[fy]] = await conn.query('SELECT is_closed, label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
     if (fy && fy.is_closed) throw new Error('Cannot post to a closed financial year.');
+    const fyLabel = fy ? fy.label : '';
 
     // 1. Determine Party Account
     let partyName = '';
@@ -87,14 +88,24 @@ async function syncInventoryToLedger(conn, {
             [voucher_type, location_id, fiscal_year_id]
         );
 
-        let locStr = '';
+        let locCode = 'HO';
         if (location_id) {
-            const [[loc]] = await conn.query('SELECT code, name FROM locations WHERE id = ?', [location_id]);
-            if (loc && loc.code && loc.code !== 'XX') locStr = `-${loc.code}`;
+            const [[loc]] = await conn.query('SELECT code FROM locations WHERE id = ?', [location_id]);
+            if (loc && loc.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
         }
 
-        voucher_no = `${typeCode}${locStr}/${count + 1}`;
-        const description = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+        if (type === 'SALES_INVOICE') {
+            const nextSeq = String(count + 1).padStart(4, '0');
+            voucher_no = `JV/${locCode}/${fyLabel}/${nextSeq}`;
+        } else {
+            let locStr = locCode !== 'HO' ? `-${locCode}` : '';
+            voucher_no = `${typeCode}${locStr}/${count + 1}`;
+        }
+
+        let description = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+        if (type === 'SALES_INVOICE') {
+            description = `Inventory Item sold Agt Invoice No. ${trans_no}`;
+        }
 
         const [vRes] = await conn.query(
             `INSERT INTO vouchers (voucher_no, voucher_type, date, description, total_amount, location_id, fiscal_year_id)
@@ -104,14 +115,20 @@ async function syncInventoryToLedger(conn, {
         voucherId = vRes.insertId;
         await conn.query(`UPDATE ${headerTable} SET voucher_id = ? WHERE id = ?`, [voucherId, tx_id]);
     } else {
-        const description = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+        let description = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+        if (type === 'SALES_INVOICE') {
+            description = `Inventory Item sold Agt Invoice No. ${trans_no}`;
+        }
         await conn.query(
             `UPDATE vouchers SET date = ?, description = ?, total_amount = ? WHERE id = ?`,
             [trans_date, description, total_amount, voucherId]
         );
     }
 
-    const entryDesc = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+    let entryDesc = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
+    if (type === 'SALES_INVOICE') {
+        entryDesc = `Inventory Item sold Agt Invoice No. ${trans_no}`;
+    }
 
     // 4. Create Ledger Entries (Debit/Credit logic based on type)
     // Purchases & Sales Returns: Debit Inventory Account, Credit Party
