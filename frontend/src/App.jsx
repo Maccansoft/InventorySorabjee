@@ -297,7 +297,9 @@ const App = () => {
 
   const fetchCompanyInfo = async () => {
     try {
-      const { data } = await axios.get(`${API}/company`);
+      const locId = effectiveLocationId || currentUser?.location_id;
+      const url = locId ? `${API}/company?location_id=${locId}` : `${API}/company`;
+      const { data } = await axios.get(url);
       setCompanyInfo(data);
     } catch (e) { console.error('Error fetching company info:', e); }
   };
@@ -313,10 +315,15 @@ const App = () => {
     if (currentUser) {
       fetchAccounts();
       fetchReports();
-      fetchCompanyInfo();
       fetchLocations();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchCompanyInfo();
+    }
+  }, [currentUser, effectiveLocationId]);
 
   const getReportMeta = () => {
     const loc = locations.find(l => l.id === effectiveLocationId);

@@ -430,6 +430,24 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                             }
                         } catch (err) { console.error("Global duplicate check failed", err); }
                     }
+
+                    // 3. Check Global Database for Purchase Return (Prevents returning same item twice)
+                    if (type === 'PURCHASE_RETURN') {
+                        try {
+                            const { data: globalCheck } = await axios.get(`${API}/check-duplicate-item`, {
+                                params: { lot_no: foundLot, sno: foundSno, type }
+                            });
+                            if (globalCheck.exists) {
+                                alert(`Duplicate Scan: Lot #${foundLot} / SNo #${foundSno} is already added.`);
+                                setDetails(prev => {
+                                    const next = [...prev];
+                                    next[idx].barcode = ''; // Clear scanner
+                                    return next;
+                                });
+                                return;
+                            }
+                        } catch (err) { console.error("Global duplicate check failed", err); }
+                    }
                 }
 
                 const newDetails = [...details];

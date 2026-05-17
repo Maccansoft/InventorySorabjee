@@ -27,7 +27,19 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                 }
 
                 const { data } = await axios.get('/api/inventory/sales/print-bulk', { params });
-                setInvoices(data);
+
+                const updatedData = await Promise.all(data.map(async (inv) => {
+                    let finalCompanyInfo = companyInfo;
+                    if (inv.location_id) {
+                        try {
+                            const { data: locCompanyInfo } = await axios.get(`/api/company?location_id=${inv.location_id}`);
+                            finalCompanyInfo = locCompanyInfo;
+                        } catch (e) { console.error('Failed to fetch specific location company info', e); }
+                    }
+                    return { ...inv, companyInfo: finalCompanyInfo };
+                }));
+
+                setInvoices(updatedData);
             } catch (e) {
                 console.error(e);
                 alert('Error loading invoices: ' + (e.response?.data?.error || e.message));
@@ -150,22 +162,28 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                     {invoices.map((inv, idx) => {
                         const { items, invoiceGrossTotal } = processInvoiceData(inv);
                         return (
-                            <div key={inv.id} className="invoice-document bulk-invoice-page" style={{ pageBreakAfter: 'always', padding: '40px 60px' }}>
+                            <div key={inv.id} className="invoice-document bulk-invoice-page" style={{ padding: '40px 60px' }}>
                                 {/* Header */}
                                 <div className="inv-header">
                                     <div className="inv-header-left">
-                                        <h1 className="company-name-large">SORABJEE PATEL & CO</h1>
+                                        <h1 className="company-name-large">{inv.companyInfo?.CompanyName || 'FA SYSTEM'}</h1>
                                         <h2 className="doc-type-title">INVOICE</h2>
                                     </div>
                                     <div className="inv-header-right">
-                                        <p className="company-info-text-bold">SORABJEE PATEL & CO.</p>
-                                        <p className="company-info-text">45, Badri Building I.I Chundrigar Road,</p>
-                                        <p className="company-info-text">Karachi - 74000 [Pakistan] P.O. Box: 13524</p>
-                                        <p className="company-info-text">Tel: +92-21-3242-1033, +92-21-3247-3218</p>
-                                        <p className="company-info-text">Fax: +92-21-3242-3018</p>
-                                        <p className="company-info-text">NTN: 2271347-6</p>
-                                        <p className="company-info-text">STRN: 17-00-9018-034-19</p>
-                                        <p className="company-info-text email">kmn_sorabjee64@yahoo.com</p>
+                                        <p className="company-info-text-bold">{inv.companyInfo?.CompanyName || 'FA SYSTEM'}</p>
+                                        {inv.companyInfo?.Address && <p className="company-info-text">{inv.companyInfo.Address}</p>}
+                                        {(inv.companyInfo?.Contact || inv.companyInfo?.FaxNo) && (
+                                            <p className="company-info-text">
+                                                {inv.companyInfo?.Contact ? `Tel: ${inv.companyInfo.Contact}` : ''}
+                                                {inv.companyInfo?.Contact && inv.companyInfo?.FaxNo ? ' | ' : ''}
+                                                {inv.companyInfo?.FaxNo ? `Fax: ${inv.companyInfo.FaxNo}` : ''}
+                                            </p>
+                                        )}
+                                        {inv.companyInfo?.NTNo && <p className="company-info-text">NTN: {inv.companyInfo.NTNo}</p>}
+                                        {inv.companyInfo?.GSTNo && <p className="company-info-text">STRN/GST: {inv.companyInfo.GSTNo}</p>}
+                                        {inv.companyInfo?.GovtNo && <p className="company-info-text">Govt No: {inv.companyInfo.GovtNo}</p>}
+                                        {inv.companyInfo?.IATACode && <p className="company-info-text">IATA: {inv.companyInfo.IATACode}</p>}
+                                        {inv.companyInfo?.Email && <p className="company-info-text email">{inv.companyInfo.Email}</p>}
                                     </div>
                                 </div>
 
@@ -280,28 +298,31 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                     </div>
                                 </div>
 
-                                {/* Signatures */}
-                                <div className="signatures-section">
-                                    <div className="sign-box">
-                                        Reciever's Sign: ___________________________
+                                {/* Footer Wrapper - Pushed to bottom */}
+                                <div className="invoice-footer-wrapper">
+                                    {/* Signatures */}
+                                    <div className="signatures-section">
+                                        <div className="sign-box">
+                                            Reciever's Sign: ___________________________
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Footer Terms */}
-                                <div className="footer-terms">
-                                    <div className="terms-decoration-bar"></div>
-                                    <p>Payment shall be made in full at the time of receiving goods.</p>
-                                    <p>The customer has to make sure the quantity and quality of goods at the time of receiving.</p>
-                                    <p>Goods can not be returned once received, without a valid reason.</p>
-                                    <p>Any claim will be entertained within 5 days after receiving the goods.</p>
-                                    <p>Company does not take any responsibility if customer fails to check the goods at the time of receiving.</p>
-                                    <p>This is a system-generated invoice, does not need signature.</p>
-                                </div>
+                                    {/* Footer Terms */}
+                                    <div className="footer-terms">
+                                        <div className="terms-decoration-bar"></div>
+                                        <p>Payment shall be made in full at the time of receiving goods.</p>
+                                        <p>The customer has to make sure the quantity and quality of goods at the time of receiving.</p>
+                                        <p>Goods can not be returned once received, without a valid reason.</p>
+                                        <p>Any claim will be entertained within 5 days after receiving the goods.</p>
+                                        <p>Company does not take any responsibility if customer fails to check the goods at the time of receiving.</p>
+                                        <p>This is a system-generated invoice, does not need signature.</p>
+                                    </div>
 
-                                {/* Sub Footer */}
-                                <div className="sub-footer-attribution">
-                                    <p>Application Authorized to: SORABJEE PATEL & CO.</p>
-                                    <p>© Copyright Maccansoft Corporation. All Rights Reserved.</p>
+                                    {/* Sub Footer */}
+                                    <div className="sub-footer-attribution">
+                                        <p>Application Authorized to: {inv.companyInfo?.CompanyName || 'FA SYSTEM'}</p>
+                                        <p>© Copyright Maccansoft Corporation. All Rights Reserved.</p>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -341,10 +362,21 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                     }
                     
                     .invoice-document {
-                        padding: 60px 80px;
+                        padding: 40px;
                         background: white;
                         font-family: 'Inter', sans-serif;
                         color: #1e293b;
+                        display: flex;
+                        flex-direction: column;
+                        min-height: 297mm;
+                        width: 210mm;
+                        margin: 0 auto;
+                        box-sizing: border-box;
+                    }
+
+                    .invoice-footer-wrapper {
+                        margin-top: auto;
+                        padding-top: 20px;
                     }
 
                     .inv-header {
@@ -542,23 +574,46 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                     .sub-footer-attribution p { margin: 2px 0; }
 
                     @media print {
+                        @page { size: A4 portrait; margin: 0; }
                         body * { visibility: hidden; }
                         #bulk-printable-area, #bulk-printable-area * { visibility: visible; }
-                        #bulk-printable-area {
+                        .print-modal-overlay {
                             position: absolute;
-                            left: 0; top: 0; width: 100%;
+                            left: 0;
+                            top: 0;
+                            width: 100%;
+                            height: auto;
+                            background: white;
+                            padding: 0;
+                            display: block;
+                            overflow: visible !important;
+                        }
+                        .print-modal-content {
+                            box-shadow: none;
+                            width: 100%;
+                            border-radius: 0;
+                            display: block;
+                            position: static;
+                            overflow: visible !important;
+                        }
+                        #bulk-printable-area {
+                            position: static;
                             margin: 0;
                             padding: 0;
                         }
                         .invoice-document {
-                            margin: 0;
-                            padding: 20px 40px !important;
+                            margin: 0 auto;
+                            padding: 40px !important;
                             border: none;
                             box-shadow: none;
+                            page-break-after: always;
+                            break-after: page;
+                        }
+                        .invoice-document:last-child {
+                            page-break-after: auto;
+                            break-after: auto;
                         }
                         .no-print { display: none !important; }
-                        .print-modal-overlay { background: white; padding: 0; }
-                        .print-modal-content { box-shadow: none; width: 100%; border-radius: 0; }
                         thead { display: table-header-group; }
                         tfoot { display: table-footer-group; }
                     }

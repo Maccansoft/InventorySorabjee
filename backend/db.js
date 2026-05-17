@@ -244,6 +244,27 @@ async function initDB() {
     `);
     await safeQuery(conn, 'co_info.FaxNo', 'ALTER TABLE company_info ADD COLUMN FaxNo VARCHAR(100)');
 
+    // 9.b Location-Specific Company Info
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS company_location_info (
+        id            INT PRIMARY KEY AUTO_INCREMENT,
+        company_id    INT NOT NULL,
+        location_id   INT NOT NULL,
+        Address       TEXT,
+        Contact       VARCHAR(100),
+        Email         VARCHAR(100),
+        NTNo          VARCHAR(50),
+        GSTNo         VARCHAR(50),
+        GovtNo        VARCHAR(50),
+        IATACode      VARCHAR(50),
+        FaxNo         VARCHAR(100),
+        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_comp_loc (company_id, location_id),
+        FOREIGN KEY (company_id) REFERENCES company_info(id) ON DELETE CASCADE,
+        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
+      )
+    `);
+
     // 10. Inventory Masters
     await conn.query(`CREATE TABLE IF NOT EXISTS makers (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(150) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
     await conn.query(`CREATE TABLE IF NOT EXISTS categories (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(150) NOT NULL, maker_id INT NOT NULL, rate DECIMAL(15,2) DEFAULT 0, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (maker_id) REFERENCES makers(id) ON DELETE CASCADE)`);

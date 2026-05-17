@@ -12,8 +12,17 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
     useEffect(() => {
         const fetchInvoice = async () => {
             try {
-                const { data } = await axios.get(`/api/inventory/sales/print/${invoiceId}`);
-                setData(data);
+                const { data: invData } = await axios.get(`/api/inventory/sales/print/${invoiceId}`);
+                
+                let finalCompanyInfo = companyInfo;
+                if (invData.location_id) {
+                    try {
+                        const { data: locCompanyInfo } = await axios.get(`/api/company?location_id=${invData.location_id}`);
+                        finalCompanyInfo = locCompanyInfo;
+                    } catch (e) { console.error('Failed to fetch specific location company info', e); }
+                }
+                
+                setData({ ...invData, companyInfo: finalCompanyInfo });
             } catch (e) {
                 console.error(e);
                 alert('Error loading invoice details');
@@ -21,7 +30,7 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
             setLoading(false);
         };
         fetchInvoice();
-    }, [invoiceId]);
+    }, [invoiceId, companyInfo]);
 
     if (loading) return null;
     if (!data) return null;
@@ -122,18 +131,24 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                     {/* Header */}
                     <div className="inv-header">
                         <div className="inv-header-left">
-                            <h1 className="company-name-large">SORABJEE PATEL & CO</h1>
+                            <h1 className="company-name-large">{data.companyInfo?.CompanyName || 'FA SYSTEM'}</h1>
                             <h2 className="doc-type-title">INVOICE</h2>
                         </div>
                         <div className="inv-header-right">
-                            <p className="company-info-text-bold">SORABJEE PATEL & CO.</p>
-                            <p className="company-info-text">45, Badri Building I.I Chundrigar Road,</p>
-                            <p className="company-info-text">Karachi - 74000 [Pakistan] P.O. Box: 13524</p>
-                            <p className="company-info-text">Tel: +92-21-3242-1033, +92-21-3247-3218</p>
-                            <p className="company-info-text">Fax: +92-21-3242-3018</p>
-                            <p className="company-info-text">NTN: 2271347-6</p>
-                            <p className="company-info-text">STRN: 17-00-9018-034-19</p>
-                            <p className="company-info-text email">kmn_sorabjee64@yahoo.com</p>
+                            <p className="company-info-text-bold">{data.companyInfo?.CompanyName || 'FA SYSTEM'}</p>
+                            {data.companyInfo?.Address && <p className="company-info-text">{data.companyInfo.Address}</p>}
+                            {(data.companyInfo?.Contact || data.companyInfo?.FaxNo) && (
+                                <p className="company-info-text">
+                                    {data.companyInfo?.Contact ? `Tel: ${data.companyInfo.Contact}` : ''}
+                                    {data.companyInfo?.Contact && data.companyInfo?.FaxNo ? ' | ' : ''}
+                                    {data.companyInfo?.FaxNo ? `Fax: ${data.companyInfo.FaxNo}` : ''}
+                                </p>
+                            )}
+                            {data.companyInfo?.NTNo && <p className="company-info-text">NTN: {data.companyInfo.NTNo}</p>}
+                            {data.companyInfo?.GSTNo && <p className="company-info-text">STRN/GST: {data.companyInfo.GSTNo}</p>}
+                            {data.companyInfo?.GovtNo && <p className="company-info-text">Govt No: {data.companyInfo.GovtNo}</p>}
+                            {data.companyInfo?.IATACode && <p className="company-info-text">IATA: {data.companyInfo.IATACode}</p>}
+                            {data.companyInfo?.Email && <p className="company-info-text email">{data.companyInfo.Email}</p>}
                         </div>
                     </div>
 
@@ -249,28 +264,31 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
 
                     </div>
 
-                    {/* Signatures */}
-                    <div className="signatures-section">
-                        <div className="sign-box">
-                            Reciever's Sign: ___________________________
+                    {/* Footer Wrapper - Pushed to bottom */}
+                    <div className="invoice-footer-wrapper">
+                        {/* Signatures */}
+                        <div className="signatures-section">
+                            <div className="sign-box">
+                                Reciever's Sign: ___________________________
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Footer Terms */}
-                    <div className="footer-terms">
-                        <div className="terms-decoration-bar"></div>
-                        <p>Payment shall be made in full at the time of receiving goods.</p>
-                        <p>The customer has to make sure the quantity and quality of goods at the time of receiving.</p>
-                        <p>Goods can not be returned once received, without a valid reason.</p>
-                        <p>Any claim will be entertained within 5 days after receiving the goods.</p>
-                        <p>Company does not take any responsibility if customer fails to check the goods at the time of receiving.</p>
-                        <p>This is a system-generated invoice, does not need signature.</p>
-                    </div>
+                        {/* Footer Terms */}
+                        <div className="footer-terms">
+                            <div className="terms-decoration-bar"></div>
+                            <p>Payment shall be made in full at the time of receiving goods.</p>
+                            <p>The customer has to make sure the quantity and quality of goods at the time of receiving.</p>
+                            <p>Goods can not be returned once received, without a valid reason.</p>
+                            <p>Any claim will be entertained within 5 days after receiving the goods.</p>
+                            <p>Company does not take any responsibility if customer fails to check the goods at the time of receiving.</p>
+                            <p>This is a system-generated invoice, does not need signature.</p>
+                        </div>
 
-                    {/* Sub Footer */}
-                    <div className="sub-footer-attribution">
-                        <p>Application Authorized to: SORABJEE PATEL & CO.</p>
-                        <p>© Copyright Maccansoft Corporation. All Rights Reserved.</p>
+                        {/* Sub Footer */}
+                        <div className="sub-footer-attribution">
+                            <p>Application Authorized to: {data.companyInfo?.CompanyName || 'FA SYSTEM'}</p>
+                            <p>© Copyright Maccansoft Corporation. All Rights Reserved.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -307,10 +325,21 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                     }
                     
                     .invoice-document {
-                        padding: 60px 80px;
+                        padding: 40px;
                         background: white;
                         font-family: 'Inter', sans-serif;
                         color: #1e293b;
+                        display: flex;
+                        flex-direction: column;
+                        min-height: 297mm;
+                        width: 210mm;
+                        margin: 0 auto;
+                        box-sizing: border-box;
+                    }
+                    
+                    .invoice-footer-wrapper {
+                        margin-top: auto;
+                        padding-top: 20px;
                     }
 
                     .inv-header {
@@ -534,16 +563,24 @@ const SalesInvoicePrint = ({ invoiceId, onClose, companyInfo }) => {
                     .sub-footer-attribution p { margin: 2px 0; }
 
                     @media print {
+                        @page { size: A4 portrait; margin: 0; }
                         body * { visibility: hidden; }
                         #printable-invoice, #printable-invoice * { visibility: visible; }
-                        #printable-invoice {
+                        .print-modal-overlay {
                             position: absolute;
-                            left: 0; top: 0; width: 100%;
-                            padding: 20px 40px; margin: 0;
+                            left: 0; top: 0; width: 100%; height: auto;
+                            background: white; padding: 0;
+                            display: block; overflow: visible !important;
+                        }
+                        .print-modal-content {
+                            box-shadow: none; width: 100%; border-radius: 0;
+                            display: block; position: static; overflow: visible !important;
+                        }
+                        #printable-invoice {
+                            position: static;
+                            margin: 0; padding: 40px !important;
                         }
                         .no-print { display: none !important; }
-                        .print-modal-overlay { background: white; padding: 0; }
-                        .print-modal-content { box-shadow: none; width: 100%; border-radius: 0; }
                     }
 
                     .th-salmon { background: #e67e73 !important; color: white !important; }

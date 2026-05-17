@@ -1846,6 +1846,14 @@ router.get('/check-duplicate-item', async (req, res) => {
                  WHERE lot_no = ? AND sno = ?`, 
                 [lot_no, sno]
             );
+        } else if (type === 'PURCHASE_RETURN') {
+            // Check Purchase Returns Only
+            [[conflict]] = await db.query(
+                `SELECT h.trans_no FROM purchase_return_details d 
+                 JOIN purchase_returns h ON d.purchase_return_id = h.id 
+                 WHERE d.lot_no = ? AND d.sno = ?`, 
+                [lot_no, sno]
+            );
         }
 
         if (conflict) {
