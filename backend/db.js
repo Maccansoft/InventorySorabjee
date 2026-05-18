@@ -75,6 +75,7 @@ async function initDB() {
     await safeQuery(conn, 'loc.is_active', 'ALTER TABLE locations ADD COLUMN is_active BOOLEAN DEFAULT TRUE');
     await safeQuery(conn, 'loc.idx_active', 'CREATE INDEX idx_loc_active ON locations(is_active)');
     await safeQuery(conn, 'loc.code', "ALTER TABLE locations ADD COLUMN code VARCHAR(20) NOT NULL DEFAULT 'XX'");
+    await safeQuery(conn, 'loc.unique_name', 'ALTER TABLE locations ADD UNIQUE INDEX uq_loc_name (name)');
 
     // 2. Fiscal Years
     await conn.query(`
@@ -243,6 +244,7 @@ async function initDB() {
       )
     `);
     await safeQuery(conn, 'co_info.FaxNo', 'ALTER TABLE company_info ADD COLUMN FaxNo VARCHAR(100)');
+    await safeQuery(conn, 'co_info.unique_name', 'ALTER TABLE company_info ADD UNIQUE INDEX uq_company_name (CompanyName)');
 
     // 9.b Location-Specific Company Info
     await conn.query(`

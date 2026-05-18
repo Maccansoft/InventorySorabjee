@@ -3,7 +3,7 @@ import { X, Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-r
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 
-const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, location_id, onComplete }) => {
+const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, location_id, onComplete, requiredHeaders }) => {
     const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
@@ -23,12 +23,12 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
         if (selectedFile) {
-            if (selectedFile.name.toLowerCase().endsWith('.csv')) {
+            if (selectedFile.name.toLowerCase().match(/\.(csv|xlsx|xls)$/)) {
                 setFile(selectedFile);
                 setError(null);
                 setResult(null);
             } else {
-                setError("Please select a .csv file.");
+                setError("Please select a .csv or .xlsx file.");
                 setFile(null);
             }
         }
@@ -58,7 +58,7 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
 
                     // Basic header validation (Maker, Category, Qty are minimum required)
                     const headers = Object.keys(json[0]);
-                    const required = ['Maker', 'Category', 'Qty'];
+                    const required = requiredHeaders || ['Maker', 'Category', 'Qty'];
                     const missing = required.filter(h => !headers.includes(h) && !headers.includes(h.toLowerCase()));
                     
                     if (missing.length > 0) {
@@ -105,7 +105,7 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
                     {!result ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>
-                                Select a .csv file to import data. The format must match the exported template exactly.
+                                Select a .csv or .xlsx file to import data. The format must match the exported template exactly.
                             </p>
                             
                             <div className={`upload-zone ${file ? 'active' : ''}`} style={{
@@ -119,7 +119,7 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
                             }}>
                                 <input 
                                     type="file" 
-                                    accept=".csv" 
+                                    accept=".csv, .xlsx, .xls" 
                                     onChange={handleFileChange} 
                                     id="csv-upload"
                                     style={{ display: 'none' }}
@@ -129,7 +129,7 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
                                         <FileText className={file ? 'text-blue-600' : 'text-slate-400'} size={24} style={{ margin: 'auto' }} />
                                     </div>
                                     <span style={{ fontWeight: 600, color: file ? '#1e293b' : '#64748b', fontSize: '0.9rem' }}>
-                                        {file ? file.name : 'Click to browse CSV file'}
+                                        {file ? file.name : 'Click to browse Excel/CSV file'}
                                     </span>
                                 </label>
                             </div>

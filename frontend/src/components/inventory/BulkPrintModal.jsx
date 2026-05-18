@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Printer, List, Hash } from 'lucide-react';
 
-const BulkPrintModal = ({ isOpen, onClose, onConfirm }) => {
+const BulkPrintModal = ({ isOpen, onClose, onConfirm, printType }) => {
     const [mode, setMode] = useState('RANGE'); // 'RANGE' or 'SPECIFIC'
     const [fromNo, setFromNo] = useState('');
     const [toNo, setToNo] = useState('');
@@ -25,7 +25,7 @@ const BulkPrintModal = ({ isOpen, onClose, onConfirm }) => {
                 <div className="modal-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <Printer size={22} color="#2563eb" />
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Print Multiple Invoices</h2>
+                        <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Print Multiple {printType === 'DC' ? 'DC' : 'Invoices'}</h2>
                     </div>
                     <button onClick={onClose} style={{ color: '#94a3b8' }}><X size={24} /></button>
                 </div>

@@ -7,13 +7,14 @@ import {
   ArrowDownCircle, ArrowUpCircle, BookMarked,
   Users, Calendar, MapPin, LogOut, Settings, ChevronDown,
   Building2, ShieldCheck, Shield, Filter, Eye, ShoppingCart,
-  Repeat, Truck, RefreshCw, Printer, Barcode, Bell
+  Repeat, Truck, RefreshCw, Printer, Barcode, Bell, Upload
 } from 'lucide-react';
 import VoucherForm from './components/VoucherForm';
 import VoucherList from './components/VoucherList';
 import LedgerView from './components/LedgerView';
 import AccountModal from './components/AccountModal';
 import AccountTree from './components/AccountTree';
+import ImportModal from './components/common/ImportModal';
 import LoginPage from './components/LoginPage';
 import UserManagement from './components/UserManagement';
 import FiscalYearManager from './components/FiscalYearManager';
@@ -61,6 +62,7 @@ const App = () => {
   const [treeAccounts, setTreeAccounts] = useState([]);
   const [accountModal, setAccountModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
+  const [accountImportModal, setAccountImportModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('fa_active_tab') || 'Dashboard');
 
@@ -585,6 +587,11 @@ const App = () => {
                   <FileText size={16} /> Export
                 </button>
                 {!isFYClosed && (
+                  <button className="btn-secondary" onClick={() => setAccountImportModal(true)}>
+                    <Upload size={16} /> Import
+                  </button>
+                )}
+                {!isFYClosed && (
                   <button className="btn-primary" onClick={() => setAccountModal(true)}>
                     <Plus size={17} /> Add Account
                   </button>
@@ -965,6 +972,17 @@ const App = () => {
           onTransferClick={handleTransferFromRequest}
       />
 
+      <ImportModal
+        isOpen={accountImportModal}
+        onClose={() => setAccountImportModal(false)}
+        title="Chart of Accounts"
+        endpoint="/api/accounts/import"
+        location_id={effectiveLocationId}
+        fiscal_year_id={currentUser?.fiscal_year_id}
+        requiredHeaders={['Account Name', 'Parent ID']}
+        onComplete={fetchAccounts}
+      />
+
       <ExportModal
         isOpen={exportModal}
         onClose={() => setExportModal(false)}
@@ -977,10 +995,20 @@ const App = () => {
           let title = activeTab;
 
           if (activeTab === 'Chart of Accounts') {
-            data = accounts.map(a => ({ code: a.account_code, name: a.account_name, type: a.account_type, status: a.is_active ? 'Active' : 'Inactive' }));
-            headers = ['Code', 'Account Name', 'Type', 'Status'];
-            fields = ['code', 'name', 'type', 'status'];
-            filename = 'Chart_of_Accounts';
+            data = accounts.map(a => ({
+              id: a.id,
+              parent_id: a.parent_id || '',
+              account_code: a.account_code,
+              account_name: a.account_name,
+              account_type: a.account_type,
+              statement_type: a.statement_type || '',
+              inventory_module: a.inventory_module || '',
+              is_active: a.is_active ? 'TRUE' : 'FALSE',
+              location_id: a.location_id || ''
+            }));
+            headers = ['ID', 'Parent ID', 'Account Code', 'Account Name', 'Account Type', 'Statement Type', 'Inventory Module', 'Is Active', 'Location ID'];
+            fields = ['id', 'parent_id', 'account_code', 'account_name', 'account_type', 'statement_type', 'inventory_module', 'is_active', 'location_id'];
+            filename = 'Chart_of_Accounts_Data';
             title = 'Chart of Accounts Report';
           } else if (activeTab === 'Trial Balance') {
             data = trialBalance.map(r => ({ code: r.account_code, name: r.account_name, type: r.account_type, dr: r.total_debit || 0, cr: r.total_credit || 0 }));
@@ -1022,18 +1050,13 @@ const App = () => {
 const LocationsManager = ({ locations, onRefresh }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingLoc, setEditingLoc] = useState(null);
-  const [form, setForm] = useState({ code: '', name: '', is_active: true });
+  const [form, setForm] = useState({ code: '', name: '', is_active: true, Address: '', Contact: '', Email: '', NTNo: '', GSTNo: '', FaxNo: '' });
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
 
   const handleNameChange = (e) => {
     const name = e.target.value.toUpperCase();
-    let code = form.code;
-    // Auto-generate code ONLY when adding a new location and code hasn't been manually touched or is empty
-    if (!editingLoc) {
-      code = name.trim().substring(0, 3).toUpperCase();
-    }
-    setForm({ ...form, name, code });
+    setForm({ ...form, name });
   };
 
   const handleSubmit = async (e) => {
@@ -1049,7 +1072,7 @@ const LocationsManager = ({ locations, onRefresh }) => {
       }
       setShowForm(false);
       setEditingLoc(null);
-      setForm({ code: '', name: '', is_active: true });
+      setForm({ code: '', name: '', is_active: true, Address: '', Contact: '', Email: '', NTNo: '', GSTNo: '', FaxNo: '' });
       onRefresh();
     } catch (ex) {
       setErr(ex.response?.data?.error || 'Error saving location');
@@ -1058,7 +1081,7 @@ const LocationsManager = ({ locations, onRefresh }) => {
 
   const handleEdit = (loc) => {
     setEditingLoc(loc);
-    setForm({ code: loc.code, name: loc.name, is_active: !!loc.is_active });
+    setForm({ code: loc.code, name: loc.name, is_active: !!loc.is_active, Address: loc.Address || '', Contact: loc.Contact || '', Email: loc.Email || '', NTNo: loc.NTNo || '', GSTNo: loc.GSTNo || '', FaxNo: loc.FaxNo || '' });
     setShowForm(true);
   };
 
@@ -1079,7 +1102,7 @@ const LocationsManager = ({ locations, onRefresh }) => {
           <Building2 size={22} />
           <div><h2>Locations / Branches</h2><p>{locations.length} location(s) configured</p></div>
         </div>
-        <button className="btn-primary" onClick={() => { setEditingLoc(null); setForm({ code: '', name: '', is_active: true }); setShowForm(true); }}><Plus size={16} /> Add Location</button>
+        <button className="btn-primary" onClick={() => { setEditingLoc(null); setForm({ code: '', name: '', is_active: true, Address: '', Contact: '', Email: '', NTNo: '', GSTNo: '', FaxNo: '' }); setShowForm(true); }}><Plus size={16} /> Add Location</button>
       </div>
       {msg && <div className="um-success-msg">✅ {msg}</div>}
       <div className="um-table-card">
@@ -1110,42 +1133,78 @@ const LocationsManager = ({ locations, onRefresh }) => {
         </table>
       </div>
       {showForm && (
-        <div className="modal-backdrop" onClick={() => { setShowForm(false); setEditingLoc(null); }}>
-          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop">
+          <div className="modal-box" style={{ maxWidth: 800, maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h3>{editingLoc ? 'Edit Location' : 'Add Location'}</h3>
               <button className="modal-close" onClick={() => { setShowForm(false); setEditingLoc(null); }}>✕</button>
             </div>
             {err && <div className="um-error-msg">⚠️ {err}</div>}
             <form onSubmit={handleSubmit} style={{ padding: '16px 24px' }}>
-              <div className="form-field" style={{ marginBottom: 16 }}>
-                <label>Location Name</label>
-                <input value={form.name} onChange={handleNameChange} placeholder="e.g. MULTAN" required />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: 16 }}>
+                <div className="form-field">
+                  <label>Location Name</label>
+                  <input value={form.name} onChange={handleNameChange} placeholder="e.g. MULTAN" required />
+                </div>
+                <div className="form-field">
+                  <label>Location Code</label>
+                  <input
+                    value={form.code}
+                    onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. MUL"
+                    required
+                    maxLength={10}
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Contact</label>
+                  <input value={form.Contact} onChange={e => setForm({ ...form, Contact: e.target.value })} placeholder="Contact Number" />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: 16 }}>
+                <div className="form-field">
+                  <label>Email</label>
+                  <input type="email" value={form.Email} onChange={e => setForm({ ...form, Email: e.target.value })} placeholder="Email Address" />
+                </div>
+                <div className="form-field">
+                  <label>NTN</label>
+                  <input value={form.NTNo} onChange={e => setForm({ ...form, NTNo: e.target.value })} placeholder="NTN" />
+                </div>
+                <div className="form-field">
+                  <label>GST No</label>
+                  <input value={form.GSTNo} onChange={e => setForm({ ...form, GSTNo: e.target.value })} placeholder="GST No" />
+                </div>
               </div>
               <div className="form-field" style={{ marginBottom: 16 }}>
-                <label>Location Code {editingLoc ? '' : '(Auto-generated)'}</label>
-                <input
-                  value={form.code}
-                  onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                  placeholder="e.g. MUL"
-                  required
-                  maxLength={10}
-                  readOnly={!editingLoc}
-                  style={!editingLoc ? { background: '#f8fafc', cursor: 'not-allowed' } : {}}
+                <label>Address</label>
+                <textarea 
+                  value={form.Address} 
+                  onChange={e => setForm({ ...form, Address: e.target.value })} 
+                  placeholder="Full Address" 
+                  rows={2} 
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', resize: 'vertical' }}
                 />
               </div>
-              {editingLoc && (
-                <div className="form-field" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={form.is_active}
-                    onChange={e => setForm({ ...form, is_active: e.target.checked })}
-                    style={{ width: 'auto', margin: 0 }}
-                  />
-                  <label htmlFor="is_active" style={{ marginBottom: 0 }}>Active</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: 16 }}>
+                <div className="form-field">
+                  <label>Fax No</label>
+                  <input value={form.FaxNo} onChange={e => setForm({ ...form, FaxNo: e.target.value })} placeholder="Fax No" />
                 </div>
-              )}
+                {editingLoc && (
+                  <div className="form-field" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        id="is_active"
+                        checked={form.is_active}
+                        onChange={e => setForm({ ...form, is_active: e.target.checked })}
+                        style={{ width: 'auto', margin: 0 }}
+                      />
+                      <label htmlFor="is_active" style={{ marginBottom: 0 }}>Active</label>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditingLoc(null); }}>Cancel</button>
                 <button type="submit" className="btn-primary">

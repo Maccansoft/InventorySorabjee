@@ -7,6 +7,7 @@ import { formatAmount, formatQty } from '../../utils/numberUtils';
 const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser }) => {
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const isDC = selection.printType === 'DC';
 
     useEffect(() => {
         const fetchInvoices = async () => {
@@ -71,7 +72,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                         borderRadius: '50%',
                         animation: 'spin 1s linear infinite'
                     }}></div>
-                    <p style={{ fontWeight: 'bold', color: '#475569' }}>Preparing Invoices for Printing...</p>
+                    <p style={{ fontWeight: 'bold', color: '#475569' }}>Preparing {isDC ? 'Delivery Challans' : 'Invoices'} for Printing...</p>
                     <style>{`
                         @keyframes spin {
                             from { transform: rotate(0deg); }
@@ -140,7 +141,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
             <div className="print-modal-content" style={{ width: '1100px' }}>
                 <div className="print-action-bar no-print">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <h2 style={{ fontWeight: 700, color: '#334155', margin: 0 }}>Bulk Print Preview ({invoices.length} Invoices)</h2>
+                        <h2 style={{ fontWeight: 700, color: '#334155', margin: 0 }}>Bulk Print Preview ({invoices.length} {isDC ? 'Delivery Challans' : 'Invoices'})</h2>
                         <button 
                             onClick={handlePrint} 
                             className="btn-primary"
@@ -150,7 +151,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                 padding: '8px 24px'
                             }}
                         >
-                            <Printer size={18} /> Print All Invoices
+                            <Printer size={18} /> Print All {isDC ? 'Delivery Challans' : 'Invoices'}
                         </button>
                     </div>
                     <button onClick={onClose} style={{ padding: '8px', color: '#94a3b8' }}>
@@ -167,7 +168,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                 <div className="inv-header">
                                     <div className="inv-header-left">
                                         <h1 className="company-name-large">{inv.companyInfo?.CompanyName || 'FA SYSTEM'}</h1>
-                                        <h2 className="doc-type-title">INVOICE</h2>
+                                        <h2 className="doc-type-title">{isDC ? 'DELIVERY CHALLAN' : 'INVOICE'}</h2>
                                     </div>
                                     <div className="inv-header-right">
                                         <p className="company-info-text-bold">{inv.companyInfo?.CompanyName || 'FA SYSTEM'}</p>
@@ -192,7 +193,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                 {/* Billing & Invoice Info */}
                                 <div className="inv-info-section">
                                     <div className="bill-to-box">
-                                        <span className="info-label">INVOICE TO:</span>
+                                        <span className="info-label">{isDC ? 'DELIVERY CHALLAN TO:' : 'INVOICE TO:'}</span>
                                         <h3 className="customer-name-print">{inv.customer_name}</h3>
                                         <p className="customer-detail-text">{inv.customer_address}</p>
                                         <p className="customer-detail-text">{inv.customer_mobile}</p>
@@ -200,7 +201,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                         <p className="customer-detail-text">PO# {inv.po_no || 'N/A'}</p>
                                     </div>
                                     <div className="invoice-meta-box">
-                                        <div className="invoice-number-large">INVOICE# {inv.trans_no.split('-').pop()}</div>
+                                        <div className="invoice-number-large">{isDC ? 'DC#' : 'INVOICE#'} {inv.trans_no.split('-').pop()}</div>
                                         <div className="meta-row">
                                             <span className="meta-label">Invoice Date:</span>
                                             <span className="meta-value">{formatDate(inv.trans_date)}</span>
@@ -315,7 +316,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                         <p>Goods can not be returned once received, without a valid reason.</p>
                                         <p>Any claim will be entertained within 5 days after receiving the goods.</p>
                                         <p>Company does not take any responsibility if customer fails to check the goods at the time of receiving.</p>
-                                        <p>This is a system-generated invoice, does not need signature.</p>
+                                        <p>This is a system-generated {isDC ? 'delivery challan' : 'invoice'}, does not need signature.</p>
                                     </div>
 
                                     {/* Sub Footer */}

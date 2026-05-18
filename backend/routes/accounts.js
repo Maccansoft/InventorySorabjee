@@ -159,4 +159,94 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+router.post('/import', async (req, res) => {
+    const { rows, location_id } = req.body;
+    let imported = 0;
+    let failed = 0;
+    let errors = [];
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowIndex = i + 2; // Assuming header is row 1
+            try {
+                if (!row['Account Name'] || !row['Parent ID']) {
+                    throw new Error("Missing required fields: 'Account Name', 'Parent ID'");
+                }
+
+                const isActive = row['Is Active'] !== undefined 
+                    ? (String(row['Is Active']).toUpperCase() === 'TRUE' || row['Is Active'] === 1) 
+                    : true;
+
+                const parentId = parseInt(row['Parent ID']);
+                const accountName = String(row['Account Name']).trim();
+                const statementType = row['Statement Type'] ? String(row['Statement Type']).trim() : null;
+                const inventoryModule = row['Inventory Module'] ? String(row['Inventory Module']).trim() : 'NONE';
+                const rowLocationId = row['Location ID'] ? parseInt(row['Location ID']) : (location_id || null);
+                const id = row['ID'] ? parseInt(row['ID']) : null;
+
+                if (id) {
+                    // Update existing
+                    await connection.query(
+                        'UPDATE chart_of_accounts SET account_name = ?, is_active = ?, statement_type = ?, inventory_module = ?, location_id = ? WHERE id = ?',
+                        [accountName, isActive, statementType, inventoryModule, rowLocationId, id]
+                    );
+                } else {
+                    // Insert new
+                    const [[parentAccount]] = await connection.query(
+                        'SELECT * FROM chart_of_accounts WHERE id = ?',
+                        [parentId]
+                    );
+
+                    if (!parentAccount) {
+                        throw new Error(`Parent ID ${parentId} not found`);
+                    }
+
+                    const level = parentAccount.level + 1;
+                    const accountType = parentAccount.account_type;
+                    const stmtType = statementType || parentAccount.statement_type;
+
+                    const [[{ maxCode }]] = await connection.query(
+                        'SELECT MAX(account_code) as maxCode FROM chart_of_accounts WHERE parent_id = ?',
+                        [parentId]
+                    );
+
+                    let nextNum = 1;
+                    if (maxCode) {
+                        const parts = maxCode.split('-');
+                        const lastPart = parts[parts.length - 1];
+                        nextNum = parseInt(lastPart) + 1;
+                    }
+
+                    const nextNumber = String(nextNum).padStart(3, '0');
+                    const newCode = `${parentAccount.account_code}-${nextNumber}`;
+
+                    await connection.query(
+                        `INSERT INTO chart_of_accounts
+                         (account_code, account_name, parent_id, level, account_type, is_main, is_active, statement_type, inventory_module, location_id)
+                         VALUES (?, ?, ?, ?, ?, FALSE, ?, ?, ?, ?)`,
+                        [newCode, accountName, parentId, level, accountType, isActive, stmtType, inventoryModule, rowLocationId]
+                    );
+                }
+                imported++;
+            } catch (err) {
+                failed++;
+                errors.push({ row: rowIndex, error: err.message });
+            }
+        }
+
+        await connection.commit();
+        res.json({ total: rows.length, imported, failed, errors });
+    } catch (err) {
+        await connection.rollback();
+        console.error("Import Error:", err);
+        res.status(500).json({ error: "Import transaction failed: " + err.message });
+    } finally {
+        connection.release();
+    }
+});
+
 module.exports = router;

@@ -52,6 +52,7 @@ const InventoryTransactions = ({
     const [showPrint, setShowPrint] = useState(null); // stores invoice ID
     const [filterLocationId, setFilterLocationId] = useState(viewLocationId);
     const [bulkPrintModal, setBulkPrintModal] = useState(false);
+    const [bulkPrintType, setBulkPrintType] = useState('INVOICE');
     const [bulkPrintSelection, setBulkPrintSelection] = useState(null);
     
     const isTransfer = activeFilter === 'TRANSFER';
@@ -295,22 +296,40 @@ const InventoryTransactions = ({
                             </button>
                         )}
                         {activeFilter === 'SALES_INVOICE' && (
-                            <button 
-                                className="btn-secondary" 
-                                style={{ 
-                                    padding: '6px 12px', 
-                                    height: 36, 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: 6,
-                                    background: '#ecfdf5',
-                                    color: '#059669',
-                                    border: '1px solid #10b981'
-                                }}
-                                onClick={() => setBulkPrintModal(true)}
-                            >
-                                <Printer size={15} /> Print Multiple Invoices
-                            </button>
+                            <>
+                                <button 
+                                    className="btn-secondary" 
+                                    style={{ 
+                                        padding: '6px 12px', 
+                                        height: 36, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: 6,
+                                        background: '#ecfdf5',
+                                        color: '#059669',
+                                        border: '1px solid #10b981'
+                                    }}
+                                    onClick={() => { setBulkPrintType('INVOICE'); setBulkPrintModal(true); }}
+                                >
+                                    <Printer size={15} /> Print Multiple Invoices
+                                </button>
+                                <button 
+                                    className="btn-secondary" 
+                                    style={{ 
+                                        padding: '6px 12px', 
+                                        height: 36, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: 6,
+                                        background: '#fffbeb',
+                                        color: '#d97706',
+                                        border: '1px solid #fbbf24'
+                                    }}
+                                    onClick={() => { setBulkPrintType('DC'); setBulkPrintModal(true); }}
+                                >
+                                    <Printer size={15} /> Print Multiple DC
+                                </button>
+                            </>
                         )}
                         {initialType === 'ALL' && (
                             <SearchableSelect
@@ -666,11 +685,12 @@ const InventoryTransactions = ({
             {bulkPrintModal && (
                 <BulkPrintModal
                     isOpen={bulkPrintModal}
+                    printType={bulkPrintType}
                     onClose={() => setBulkPrintModal(false)}
                     currentUser={currentUser}
                     onConfirm={(selection) => {
                         setBulkPrintModal(false);
-                        setBulkPrintSelection(selection);
+                        setBulkPrintSelection({ ...selection, printType: bulkPrintType });
                     }}
                 />
             )}

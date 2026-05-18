@@ -11,7 +11,7 @@ SET time_zone = "+00:00";
 CREATE TABLE IF NOT EXISTS `locations` (
     `id`             INT PRIMARY KEY AUTO_INCREMENT,
     `code`           VARCHAR(20)  NOT NULL UNIQUE,
-    `name`           VARCHAR(150) NOT NULL,
+    `name`           VARCHAR(150) NOT NULL UNIQUE,
     `is_head_office` BOOLEAN      DEFAULT FALSE,
     `is_active`      BOOLEAN      DEFAULT TRUE,
     `created_at`     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `opening_balances` (
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `company_info` (
     `id`            INT PRIMARY KEY AUTO_INCREMENT,
-    `CompanyName`   VARCHAR(255) NOT NULL,
+    `CompanyName`   VARCHAR(255) NOT NULL UNIQUE,
     `Address`       TEXT,
     `Contact`       VARCHAR(100),
     `Email`         VARCHAR(100),
@@ -159,6 +159,24 @@ CREATE TABLE IF NOT EXISTS `company_info` (
     `IATACode`      VARCHAR(50),
     `FaxNo`         VARCHAR(100),
     `updated_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `company_location_info` (
+    `id`            INT PRIMARY KEY AUTO_INCREMENT,
+    `company_id`    INT NOT NULL,
+    `location_id`   INT NOT NULL,
+    `Address`       TEXT,
+    `Contact`       VARCHAR(100),
+    `Email`         VARCHAR(100),
+    `NTNo`          VARCHAR(50),
+    `GSTNo`         VARCHAR(50),
+    `GovtNo`        VARCHAR(50),
+    `IATACode`      VARCHAR(50),
+    `FaxNo`         VARCHAR(100),
+    `updated_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_comp_loc` (`company_id`, `location_id`),
+    CONSTRAINT `fk_cli_company` FOREIGN KEY (`company_id`) REFERENCES `company_info`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_cli_location` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
