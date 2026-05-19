@@ -267,7 +267,8 @@ CREATE TABLE IF NOT EXISTS `stock_opening_balances` (
     CONSTRAINT `fk_stk_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers`(`id`),
     CONSTRAINT `fk_stk_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
     CONSTRAINT `fk_stk_loc` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`),
-    CONSTRAINT `fk_stk_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years`(`id`)
+    CONSTRAINT `fk_stk_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years`(`id`),
+    CONSTRAINT `fk_stk_power` FOREIGN KEY (`power_id`) REFERENCES `powers`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- 11b. Purchases
@@ -313,7 +314,54 @@ CREATE TABLE IF NOT EXISTS `purchase_details` (
     INDEX (`purchase_id`),
     CONSTRAINT `fk_pur_det_header` FOREIGN KEY (`purchase_id`) REFERENCES `purchases`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_pur_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers`(`id`),
-    CONSTRAINT `fk_pur_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`)
+    CONSTRAINT `fk_pur_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
+    CONSTRAINT `fk_pur_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `purchase_returns` (
+    `id`             INT PRIMARY KEY AUTO_INCREMENT,
+    `trans_no`       VARCHAR(50) UNIQUE,
+    `trans_date`     DATE NOT NULL,
+    `supplier_id`    INT NULL,
+    `total_amount`   DECIMAL(15,2) DEFAULT 0,
+    `voucher_id`     INT NULL,
+    `fiscal_year_id` INT NOT NULL,
+    `user_id`        INT NOT NULL,
+    `location_id`    INT NOT NULL,
+    `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `sequence_no`    INT DEFAULT 1,
+    `transaction_type` VARCHAR(20),
+    `location_code`  VARCHAR(20),
+    `fiscal_year_label` VARCHAR(50),
+    INDEX (`location_id`, `fiscal_year_id`),
+    INDEX (`trans_date`),
+    CONSTRAINT `fk_pret_sup` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers`(`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_pret_voucher` FOREIGN KEY (`voucher_id`) REFERENCES `vouchers`(`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_pret_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pret_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pret_loc` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `purchase_return_details` (
+    `id`                 INT PRIMARY KEY AUTO_INCREMENT,
+    `purchase_return_id` INT NOT NULL,
+    `maker_id`           INT NOT NULL,
+    `category_id`        INT NOT NULL,
+    `power_id`           INT NULL,
+    `lot_no`             VARCHAR(100),
+    `sno`                VARCHAR(100),
+    `exp_date`           DATE,
+    `mfg_date`           DATE,
+    `qty`                DECIMAL(15,2) DEFAULT 0,
+    `qty_sold`           DECIMAL(15,2) DEFAULT 0,
+    `rate`               DECIMAL(15,2) DEFAULT 0,
+    `p_rate`             VARCHAR(50) DEFAULT '',
+    `amount`             DECIMAL(15,2) DEFAULT 0,
+    INDEX (`purchase_return_id`),
+    CONSTRAINT `fk_pret_det_header` FOREIGN KEY (`purchase_return_id`) REFERENCES `purchase_returns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pret_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers`(`id`),
+    CONSTRAINT `fk_pret_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
+    CONSTRAINT `fk_pret_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- 11c. Sales
@@ -359,7 +407,54 @@ CREATE TABLE IF NOT EXISTS `sales_details` (
     INDEX (`sale_id`),
     CONSTRAINT `fk_sales_det_header` FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_sales_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers`(`id`),
-    CONSTRAINT `fk_sales_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`)
+    CONSTRAINT `fk_sales_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
+    CONSTRAINT `fk_sales_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `sales_returns` (
+    `id`             INT PRIMARY KEY AUTO_INCREMENT,
+    `trans_no`       VARCHAR(50) UNIQUE,
+    `trans_date`     DATE NOT NULL,
+    `customer_id`    INT NULL,
+    `total_amount`   DECIMAL(15,2) DEFAULT 0,
+    `voucher_id`     INT NULL,
+    `fiscal_year_id` INT NOT NULL,
+    `user_id`        INT NOT NULL,
+    `location_id`    INT NOT NULL,
+    `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `sequence_no`    INT DEFAULT 1,
+    `transaction_type` VARCHAR(20),
+    `location_code`  VARCHAR(20),
+    `fiscal_year_label` VARCHAR(50),
+    INDEX (`location_id`, `fiscal_year_id`),
+    INDEX (`trans_date`),
+    CONSTRAINT `fk_sret_cust` FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_sret_voucher` FOREIGN KEY (`voucher_id`) REFERENCES `vouchers`(`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_sret_fy` FOREIGN KEY (`fiscal_year_id`) REFERENCES `fiscal_years`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_sret_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_sret_loc` FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `sales_return_details` (
+    `id`              INT PRIMARY KEY AUTO_INCREMENT,
+    `sales_return_id` INT NOT NULL,
+    `maker_id`        INT NOT NULL,
+    `category_id`     INT NOT NULL,
+    `power_id`        INT NULL,
+    `lot_no`          VARCHAR(100),
+    `sno`             VARCHAR(100),
+    `exp_date`        DATE,
+    `mfg_date`        DATE,
+    `qty`             DECIMAL(15,2) DEFAULT 0,
+    `qty_sold`        DECIMAL(15,2) DEFAULT 0,
+    `rate`            DECIMAL(15,2) DEFAULT 0,
+    `p_rate`          VARCHAR(50) DEFAULT '',
+    `amount`          DECIMAL(15,2) DEFAULT 0,
+    INDEX (`sales_return_id`),
+    CONSTRAINT `fk_sret_det_header` FOREIGN KEY (`sales_return_id`) REFERENCES `sales_returns`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_sret_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers`(`id`),
+    CONSTRAINT `fk_sret_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`),
+    CONSTRAINT `fk_sret_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- 12. Barcode & Rates
@@ -457,7 +552,7 @@ CREATE TABLE IF NOT EXISTS `transfer_request_details` (
     CONSTRAINT `fk_trq_det_header` FOREIGN KEY (`request_id`) REFERENCES `transfer_requests` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_trq_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers` (`id`),
     CONSTRAINT `fk_trq_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
-    CONSTRAINT `fk_trq_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`)
+    CONSTRAINT `fk_trq_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS `transfers` (
@@ -517,7 +612,7 @@ CREATE TABLE IF NOT EXISTS `transfer_details` (
     CONSTRAINT `fk_trn_det_header` FOREIGN KEY (`transfer_id`) REFERENCES `transfers` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_trn_det_maker` FOREIGN KEY (`maker_id`) REFERENCES `makers` (`id`),
     CONSTRAINT `fk_trn_det_cat` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
-    CONSTRAINT `fk_trn_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`)
+    CONSTRAINT `fk_trn_det_power` FOREIGN KEY (`power_id`) REFERENCES `powers` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------

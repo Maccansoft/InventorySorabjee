@@ -11,21 +11,37 @@ A comprehensive Full-Stack Enterprise Resource Planning (ERP) system tailored fo
 ## 🚀 Key Features
 
 ### 🏦 Accounting & Finance
-- **Hierarchical Chart of Accounts**: Tree-view management of Assets, Liabilities, Revenue, and Expenses.
-- **Voucher Management**: Support for Payment, Receipt, and Journal vouchers with automated numbering.
-- **General Ledger**: Real-time account statements with drill-down capabilities.
-- **Fiscal Year Control**: Strict period management with the ability to close years to prevent retroactive changes.
+- **Hierarchical Chart of Accounts**: Tree-view management of Assets, Liabilities, Revenue, and Expenses with full **Excel Export & Import** capabilities for bulk updates.
+- **Voucher Management**: Support for Payment, Receipt, and Journal vouchers with automated numbering and dynamic account ledgers.
+- **General Ledger & Financial Reporting**: Real-time account statements, Trial Balances, Profit & Loss statements, and Balance Sheets with drill-down capabilities.
+- **Fiscal Year Control**: Strict period management with the ability to close years to prevent retroactive changes and preserve audit trails.
 
 ### 📦 Inventory Management
-- **Universal Transaction Engine**: Integrated handling of Purchases, Sales, Returns, and Inter-location Transfers.
-- **Traceability**: Granular tracking using Lot Numbers and Serial Numbers (SNo).
-- **Barcode Integration**: Smart structural barcode parsing for rapid data entry.
-- **Auto-Sync**: Seamless bridge between inventory movements and the general ledger.
+- **Universal Transaction Engine**: Integrated handling of Purchases, Purchase Returns, Sales, Sales Returns, and Inter-location Stock Transfers.
+- **Traceability**: Granular tracking using Lot Numbers, Serial Numbers (SNo), Expiry, and Manufacturing Dates.
+- **Barcode Integration**: Smart structural barcode parsing for rapid data entry (e.g., parsing IRIS YYMMDD expiries).
+- **Auto-Sync to Ledger**: Seamless, fully automated bridge between inventory movements and the general ledger (Customer/Supplier auto-mapping).
+- **Bulk Printing**: Efficient Multi-Invoice and Multi-Delivery Challan (DC) bulk printing.
 
-### 👥 Administration
-- **Multi-Location Support**: Data isolation and role-based access for different branches.
+### 👥 Administration & Data Integrity
+- **Multi-Location Support**: Strict data isolation and role-based access for different branches/head offices.
 - **RBAC**: Secure user management with roles (Super Admin, Admin, User).
-- **Audit Trail**: Created-by and Updated-at tracking for all key records.
+- **Audit Trail**: Created-by and Updated-at tracking for all key records, backed by MySQL transactions.
+
+---
+
+## 🏗 Database Structure Summary
+
+The MySQL database (`maccans4_fa_system`) is highly normalized and relies on strict foreign key constraints (ON DELETE CASCADE / SET NULL) to maintain referential integrity.
+
+- **Core/Admin**: `users`, `user_roles`, `locations`, `fiscal_years`
+  - Defines the operational context and security boundaries for every transaction.
+- **Finance**: `chart_of_accounts`, `vouchers`, `voucher_entries`, `journal_entries`, `journal_entry_details`, `opening_balances`
+  - Forms the double-entry accounting core. `chart_of_accounts` uses a parent-child self-referencing relationship.
+- **Inventory Masters**: `makers`, `categories`, `powers`, `suppliers`, `customers`, `barcode_master`, `company_info`
+  - Stores all master data for products and business partners.
+- **Transactions**: `purchases`, `purchase_returns`, `sales`, `sales_returns`, `transfers`, `transfer_requests`, `stock_opening_balances`
+  - Each transaction module has a Header table (e.g., `sales`) and a Details table (e.g., `sales_details`). Detail tables directly link to product master data (`maker_id`, `category_id`, `power_id`).
 
 ---
 
@@ -33,15 +49,15 @@ A comprehensive Full-Stack Enterprise Resource Planning (ERP) system tailored fo
 
 ### Frontend
 - **Framework**: React 19 (Vite)
-- **Styling**: Vanilla CSS (Custom Design System)
+- **Styling**: Vanilla CSS (Custom Design System with responsive grid layouts)
 - **Icons**: Lucide React
-- **Client**: Axios
+- **Client**: Axios for RESTful API communication
 
 ### Backend
 - **Runtime**: Node.js
 - **Framework**: Express 5
-- **Database**: MySQL (using `mysql2/promise`)
-- **Security**: JWT, BcryptJS
+- **Database**: MySQL (using `mysql2/promise` for native async/await and robust connection pooling)
+- **Security**: JWT authentication, BcryptJS password hashing
 
 ### Infrastructure
 - **Server**: Ubuntu Linux
@@ -83,7 +99,8 @@ mysql -u root -p maccans4_fa_system < backend/mysql_schema.sql
    ```
 4. Start the server:
    ```bash
-   npm start
+   npm run dev    # For development
+   npm start      # For production
    ```
 
 ### 3. Frontend Configuration
@@ -96,6 +113,17 @@ mysql -u root -p maccans4_fa_system < backend/mysql_schema.sql
    ```bash
    npm run dev
    ```
+
+---
+
+## 📖 Usage Instructions
+
+1. **Authentication:** Log in using your assigned credentials. Your view will be strictly scoped to your assigned `Location` and active `Fiscal Year`.
+2. **Setup Masters:** Before transacting, populate the `Chart of Accounts` (via UI or bulk Excel Import) and the `Inventory Masters` (Makers, Categories, Powers).
+3. **Daily Operations:** 
+   - Use **Receipts/Payments/Journals** for financial transactions.
+   - Use the **Inventory Registries** (Sales Invoice, Purchase, Stock Transfer) for physical goods.
+4. **Reporting:** Navigate to **Trial Balance**, **Profit & Loss**, or **Stock Reports** for real-time aggregated data. You can export these reports directly to Excel or print them as professional A4 documents.
 
 ---
 
@@ -141,8 +169,8 @@ server {
 
 ```text
 FASYSTEM/
-├── backend/            # Express API, Database logic, Routes
-├── frontend/           # React SPA (Vite)
+├── backend/            # Express API, Database logic, Routes, Excel handling
+├── frontend/           # React SPA (Vite), dynamic dashboards, print templates
 ├── dist/               # Production build output
 └── maccans4_fa_system.sql # Full DB Backup
 ```
@@ -153,6 +181,7 @@ FASYSTEM/
 - All API routes (except login) are protected by JWT middleware.
 - Passwords are salted and hashed using Bcrypt.
 - Location-based filtering is enforced at the database query level to ensure data privacy between branches.
+- Excel imports run within strict MySQL Transactions. If one row fails, the entire batch is rolled back to prevent data corruption.
 
 ---
 
@@ -164,4 +193,4 @@ FASYSTEM/
 
 ---
 
-© 2026 MACCANSOFT Systems. All rights reserved.# InventorySorabjee
+© 2026 MACCANSOFT Systems. All rights reserved.
