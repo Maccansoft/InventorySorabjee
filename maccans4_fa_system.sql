@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 19, 2026 at 11:01 PM
+-- Generation Time: May 20, 2026 at 12:40 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -1029,7 +1029,8 @@ CREATE TABLE `company_location_info` (
 INSERT INTO `company_location_info` (`id`, `company_id`, `location_id`, `Address`, `Contact`, `Email`, `NTNo`, `GSTNo`, `GovtNo`, `IATACode`, `FaxNo`, `updated_at`) VALUES
 (1, 1, 2, '45, Badri Building, I.I.Chundrigar Road, Karachi-74000, Pakistan', '+92-21-3242-1033, +92-21-3247-3218', 'sorabjee@gmail.com', '2271347-6', '17-00-9018-034-19', NULL, NULL, '+92-21-3242-3018', '2026-05-17 21:41:48'),
 (3, 1, 10, 'Lahore-Pakistan.', '042-', 'sorabjee@gmail.com', '2271347-6', '17-00-9018-034-19', NULL, NULL, '042', '2026-05-18 17:57:27'),
-(4, 1, 11, 'AT HOME', '+92-21-3242-1033, +92-21-3247-3218', 'sorabjee@gmail.com', '2271347-6', '17-00-9018-034-19', NULL, NULL, '+92-21-3242-3018', '2026-05-18 18:02:46');
+(4, 1, 11, 'AT HOME', '+92-21-3242-1033, +92-21-3247-3218', 'sorabjee@gmail.com', '2271347-6', '17-00-9018-034-19', NULL, NULL, '+92-21-3242-3018', '2026-05-18 18:02:46'),
+(5, 1, 12, 'Islamabad, Pakistan', '051', 'sorabjee@gmail.com', '2271347-6', '17-00-9018-034-19', NULL, NULL, '051', '2026-05-19 22:38:28');
 
 -- --------------------------------------------------------
 
@@ -1815,7 +1816,8 @@ INSERT INTO `locations` (`id`, `name`, `is_ho`, `created_at`, `is_head_office`, 
 (1, 'HEAD OFFICE', 1, '2026-02-23 09:24:33', 1, 1, 'HO'),
 (2, 'KARACHI OFFICE', 0, '2026-02-23 09:24:33', 0, 1, 'KHI'),
 (10, 'LAHORE OFFICE', 0, '2026-05-18 17:57:27', 0, 1, 'LHE'),
-(11, 'WAREHOUSE', 0, '2026-05-18 18:02:46', 0, 1, 'WH');
+(11, 'WAREHOUSE', 0, '2026-05-18 18:02:46', 0, 1, 'WH'),
+(12, 'ISLAMABAD OFFICE', 0, '2026-05-19 22:38:28', 0, 1, 'ISB');
 
 -- --------------------------------------------------------
 
@@ -2992,7 +2994,7 @@ ALTER TABLE `company_info`
 -- AUTO_INCREMENT for table `company_location_info`
 --
 ALTER TABLE `company_location_info`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `customers`
@@ -3022,7 +3024,7 @@ ALTER TABLE `journal_entry_details`
 -- AUTO_INCREMENT for table `locations`
 --
 ALTER TABLE `locations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `makers`
