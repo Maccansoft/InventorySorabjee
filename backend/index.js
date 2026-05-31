@@ -7,7 +7,17 @@ const app = express();
 const PORT = process.env.PORT || 5005;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Error logging middleware for body size limit exceptions
+app.use((err, req, res, next) => {
+    if (err && err.type === 'entity.too.large') {
+        console.error(`[PayloadTooLargeError] Incoming request size exceeded body-parser limits: limit=${err.limit}, size=${err.length}`);
+        return res.status(413).json({ error: `Payload too large. Request body size exceeds the server's limit of ${err.limit} bytes.` });
+    }
+    next(err);
+});
 
 // API Routes
 const accountRoutes = require('./routes/accounts');

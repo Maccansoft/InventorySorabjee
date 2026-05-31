@@ -22,6 +22,7 @@ const TYPE_ENDPOINT = {
     SALES_RETURN: 'sales-returns',
     TRANSFER_REQUEST: 'transfer-requests',
     STOCK_OPENING: 'opening-balances',
+    STOCK_TRANSFER_RETURN: 'stock-transfer-returns',
 };
 
 
@@ -33,6 +34,7 @@ const transactionTypes = [
     { label: 'Sales Invoice', type: 'SALES_INVOICE', endpoint: 'sales', icon: <FileText size={24} />, color: 'bg-green-light' },
     { label: 'Sales Return', type: 'SALES_RETURN', endpoint: 'sales-returns', icon: <RefreshCw size={24} />, color: 'bg-red-light' },
     { label: 'Stock Opening', type: 'STOCK_OPENING', endpoint: 'opening-balances', icon: <FileText size={24} />, color: 'bg-slate-light' },
+    { label: 'Stock Return', type: 'STOCK_TRANSFER_RETURN', endpoint: 'stock-transfer-returns', icon: <RefreshCw size={24} />, color: 'bg-rose-light' },
 ];
 
 
@@ -58,6 +60,7 @@ const InventoryTransactions = ({
     const isTransfer = activeFilter === 'TRANSFER';
     const isTrq = activeFilter === 'TRANSFER_REQUEST';
     const isSalesReturn = activeFilter === 'SALES_RETURN';
+    const isStockTransferReturn = activeFilter === 'STOCK_TRANSFER_RETURN';
     
     // Selection state
     const [selectedRows, setSelectedRows] = useState([]); // Array of unique strings "TYPE-ID-DETAILID"
@@ -256,6 +259,8 @@ const InventoryTransactions = ({
                                 const data = filtered.map(t => ({
                                     trans_no: t.trans_no || '-',
                                     date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
+                                    original_transfer_ref: t.original_transfer_ref || '-',
+                                    original_sending_location: t.original_sending_location_name || '-',
                                     maker: t.maker_name || '-',
                                     category: t.category_name || '-',
                                     power: t.power || '-',
@@ -265,17 +270,32 @@ const InventoryTransactions = ({
                                     qty_sold: activeFilter === 'SALES_RETURN' ? formatQty(t.qty_sold || 0) : undefined,
                                     qty: formatQty(t.qty || 0),
                                     total: formatAmount(t.amount || t.total_amount || 0),
-                                    party: t.supplier_name || t.customer_name || 'N/A'
+                                    party: activeFilter === 'STOCK_OPENING' 
+                                        ? (t.location_name || t.location_code || 'N/A') 
+                                        : (t.supplier_name || t.customer_name || 'N/A')
 
                                 }));
-                                const partyHeader = (activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') ? 'Vendor' : 'Customer';
+                                const partyHeader = (activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') 
+                                    ? 'Vendor' 
+                                    : (activeFilter === 'STOCK_OPENING' ? 'Location' : 'Customer');
                                 const reportName = `${currentTypeInfo?.label || 'Inventory'} Report`;
-                                const headers = ['Transaction', 'Date', 'Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date'];
+                                const headers = ['Transaction', 'Date'];
+                                if (activeFilter === 'STOCK_TRANSFER_RETURN') {
+                                    headers.push('Orig Transfer Ref', 'Orig Sending Location');
+                                }
+                                headers.push('Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date');
                                 if (activeFilter === 'SALES_RETURN') headers.push('Qty Sold');
-                                headers.push('Qty', 'Total', partyHeader);
-                                const fields = ['trans_no', 'date', 'maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date'];
+                                headers.push('Qty');
+                                if (activeFilter !== 'STOCK_TRANSFER_RETURN') headers.push('Total', partyHeader);
+                                
+                                const fields = ['trans_no', 'date'];
+                                if (activeFilter === 'STOCK_TRANSFER_RETURN') {
+                                    fields.push('original_transfer_ref', 'original_sending_location');
+                                }
+                                fields.push('maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date');
                                 if (activeFilter === 'SALES_RETURN') fields.push('qty_sold');
-                                fields.push('qty', 'total', 'party');
+                                fields.push('qty');
+                                if (activeFilter !== 'STOCK_TRANSFER_RETURN') fields.push('total', 'party');
                                 printTable(reportName, headers, data, fields, companyInfo, reportMeta);
                             }}>
                             <Printer size={15} /> Print
@@ -375,7 +395,7 @@ const InventoryTransactions = ({
                         const isStockOpening = activeFilter === 'STOCK_OPENING';
                         
                         let colCount = 10; // Base columns
-                        if (isTrq) colCount = 8;
+                        if (isTrq) colCount = 12;
                         else if (isTransfer) colCount = 16;
                         else if (isSalesReturn) colCount = 15;
                         else colCount = 14;
@@ -418,20 +438,22 @@ const InventoryTransactions = ({
                                                 </th>
                                                 <th>Transaction</th>
                                                 <th>Date</th>
+                                                {isStockTransferReturn && <th>Original Transfer Ref</th>}
+                                                {isStockTransferReturn && <th>Original Sending Location</th>}
                                                 <th>Maker</th>
                                                 <th>Category</th>
                                                 <th>Power</th>
                                                 {activeFilter === 'TRANSFER_REQUEST' && <th className="text-center">Stock Received</th>}
                                                 {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && <th className="text-center">Stock In Hand</th>}
-                                                {!isTrq && <th>Lot No</th>}
-                                                {!isTrq && <th style={{ width: 80 }}>SNO</th>}
-                                                {!isTrq && <th>Exp Date</th>}
-                                                {!isTrq && <th>Mfg Date</th>}
+                                                <th>Lot No</th>
+                                                <th style={{ width: 80 }}>SNO</th>
+                                                <th>Exp Date</th>
+                                                <th>Mfg Date</th>
                                                 {isSalesReturn && <th className="text-center">Qty Sold</th>}
                                                 <th className="text-center">{activeFilter === 'TRANSFER_REQUEST' ? 'Qty Request' : 'Qty'}</th>
-                                                {!isTrq && <th className="text-right">Total</th>}
+                                                {!isTrq && !isStockTransferReturn && <th className="text-right">Total</th>}
                                                 {(isTransfer || isTrq) && <th>Destination</th>}
-                                                {showCustomer && <th>{(activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') ? 'Vendor' : 'Customer'}</th>}
+                                                {showCustomer && !isStockTransferReturn && <th>{(activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') ? 'Vendor' : (activeFilter === 'STOCK_OPENING' ? 'Location' : 'Customer')}</th>}
                                                 <th className="text-center">Actions</th>
                                             </>
                                         )}
@@ -444,7 +466,7 @@ const InventoryTransactions = ({
                                         if (filtered.length === 0) return <tr><td colSpan={colCount} className="empty-state">No transactions recorded yet.</td></tr>;
 
                                         const formatDatePrint = (dateStr) => {
-                                            if (!dateStr) return 'N/A';
+                                            if (!dateStr) return '-';
                                             const d = new Date(dateStr);
                                             if (isNaN(d.getTime())) return dateStr;
                                             const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -592,6 +614,16 @@ const InventoryTransactions = ({
                                                     <td style={{ verticalAlign: 'top', fontWeight: 600, fontSize: '0.81rem', color: '#64748b' }}>
                                                         {isFirstInGroup ? new Date(t.trans_date).toLocaleDateString() : null}
                                                     </td>
+                                                    {isStockTransferReturn && (
+                                                        <>
+                                                            <td style={{ verticalAlign: 'top', fontWeight: 600, fontSize: '0.81rem', color: '#475569' }}>
+                                                                {isFirstInGroup ? (t.original_transfer_ref || '-') : null}
+                                                            </td>
+                                                            <td style={{ verticalAlign: 'top', fontWeight: 600, fontSize: '0.81rem', color: '#475569' }}>
+                                                                {isFirstInGroup ? (t.original_sending_location_name || '-') : null}
+                                                            </td>
+                                                        </>
+                                                    )}
                                                     <td style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1e293b' }}>{t.maker_name}</td>
                                                     <td style={{ fontSize: '0.8rem', color: '#475569' }}>{t.category_name}</td>
                                                     <td style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>{t.power || '-'}</td>
@@ -601,20 +633,26 @@ const InventoryTransactions = ({
                                                     {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && (
                                                         <td className="text-center font-bold text-slate-500" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty_in_hand || 0)}</td>
                                                     )}
-                                                    {!isTrq && <td><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 700, color: '#475569', fontSize: '0.75rem' }}>{t.lot_no}</code></td>}
-                                                    {!isTrq && <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>{t.sno || '0'}</td>}
-                                                    {!isTrq && <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.exp_date)}</span></td>}
-                                                    {!isTrq && <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.mfg_date)}</span></td>}
+                                                    <td>{t.lot_no ? <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 700, color: '#475569', fontSize: '0.75rem' }}>{t.lot_no}</code> : '-'}</td>
+                                                    <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>{t.sno || '-'}</td>
+                                                    <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.exp_date)}</span></td>
+                                                    <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.mfg_date)}</span></td>
                                                     {isSalesReturn && <td className="text-center font-bold text-slate-500" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty_sold || 0)}</td>}
                                                     <td className="text-center font-bold text-blue-600" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty || 0)}</td>
-                                                    {!isTrq && <td className="text-right font-bold text-slate-800" style={{ fontSize: '0.85rem' }}>{formatAmount(t.amount || t.total_amount || 0)}</td>}
+                                                    {!isTrq && !isStockTransferReturn && <td className="text-right font-bold text-slate-800" style={{ fontSize: '0.85rem' }}>{formatAmount(t.amount || t.total_amount || 0)}</td>}
                                                     {(isTransfer || isTrq) && (
                                                         <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>{isFirstInGroup ? (t.to_location_name || 'N/A') : null}</td>
                                                     )}
-                                                    {showCustomer && (
+                                                    {showCustomer && !isStockTransferReturn && (
                                                         <td style={{ verticalAlign: 'top' }}>
                                                             {isFirstInGroup ? (
-                                                                <div className="party-cell"><span className="party-name" style={{ fontSize: '0.78rem', fontWeight: 600 }}>{t.supplier_name || t.customer_name || 'N/A'}</span></div>
+                                                                <div className="party-cell">
+                                                                    <span className="party-name" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                                                                        {activeFilter === 'STOCK_OPENING' 
+                                                                            ? (t.location_name || t.location_code || 'N/A') 
+                                                                            : (t.supplier_name || t.customer_name || 'N/A')}
+                                                                    </span>
+                                                                </div>
                                                             ) : null}
                                                         </td>
                                                     )}
@@ -712,6 +750,8 @@ const InventoryTransactions = ({
                     const data = filtered.map(t => ({
                         trans_no: t.trans_no || '-',
                         date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
+                        original_transfer_ref: t.original_transfer_ref || '-',
+                        original_sending_location: t.original_sending_location_name || '-',
                         maker: t.maker_name || '-',
                         category: t.category_name || '-',
                         power: t.power || '-',
@@ -721,16 +761,31 @@ const InventoryTransactions = ({
                         qty_sold: activeFilter === 'SALES_RETURN' ? formatQty(t.qty_sold || 0) : undefined,
                         qty: formatQty(t.qty || 0),
                         total: formatAmount(t.amount || t.total_amount || 0),
-                        party: t.supplier_name || t.customer_name || 'N/A'
+                        party: activeFilter === 'STOCK_OPENING' 
+                            ? (t.location_name || t.location_code || 'N/A') 
+                            : (t.supplier_name || t.customer_name || 'N/A')
 
                     }));
-                    const partyHeader = (activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') ? 'Vendor' : 'Customer';
-                    const headers = ['Transaction', 'Date', 'Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date'];
+                    const partyHeader = (activeFilter === 'PURCHASE' || activeFilter === 'PURCHASE_RETURN') 
+                        ? 'Vendor' 
+                        : (activeFilter === 'STOCK_OPENING' ? 'Location' : 'Customer');
+                    const headers = ['Transaction', 'Date'];
+                    if (activeFilter === 'STOCK_TRANSFER_RETURN') {
+                        headers.push('Orig Transfer Ref', 'Orig Sending Location');
+                    }
+                    headers.push('Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date');
                     if (activeFilter === 'SALES_RETURN') headers.push('Qty Sold');
-                    headers.push('Qty', 'Total', partyHeader);
-                    const fields = ['trans_no', 'date', 'maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date'];
+                    headers.push('Qty');
+                    if (activeFilter !== 'STOCK_TRANSFER_RETURN') headers.push('Total', partyHeader);
+                    
+                    const fields = ['trans_no', 'date'];
+                    if (activeFilter === 'STOCK_TRANSFER_RETURN') {
+                        fields.push('original_transfer_ref', 'original_sending_location');
+                    }
+                    fields.push('maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date');
                     if (activeFilter === 'SALES_RETURN') fields.push('qty_sold');
-                    fields.push('qty', 'total', 'party');
+                    fields.push('qty');
+                    if (activeFilter !== 'STOCK_TRANSFER_RETURN') fields.push('total', 'party');
 
                     if (format === 'EXCEL') {
                         exportToCSV(`${currentTypeInfo?.type || 'Inventory'}_Registry`, headers, data, fields);

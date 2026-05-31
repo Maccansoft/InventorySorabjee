@@ -34,7 +34,9 @@ const AccountModal = ({ currentUser, account, accounts, onClose, onSave }) => {
         });
         return result;
     };
-    const allAccounts = flattenAccounts(accounts);
+    const allAccounts = flattenAccounts(accounts).sort((a, b) => {
+        return (a.account_code || '').localeCompare(b.account_code || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
 
     const handleSubmit = async (e) => {
         e.preventDefault();

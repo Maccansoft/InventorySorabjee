@@ -13,7 +13,7 @@ import VoucherForm from './components/VoucherForm';
 import VoucherList from './components/VoucherList';
 import LedgerView from './components/LedgerView';
 import AccountModal from './components/AccountModal';
-import AccountTree from './components/AccountTree';
+import AccountListTable from './components/AccountListTable';
 import ImportModal from './components/common/ImportModal';
 import LoginPage from './components/LoginPage';
 import UserManagement from './components/UserManagement';
@@ -31,6 +31,7 @@ import Dashboard from './components/Dashboard';
 import PendingTransfersModal from './components/inventory/PendingTransfersModal';
 import { printTable, exportToCSV } from './utils/exportUtils';
 import ExportModal from './components/common/ExportModal';
+import * as XLSX from 'xlsx';
 
 const API = '/api';
 
@@ -193,6 +194,7 @@ const App = () => {
         { icon: <Repeat size={18} />, label: 'Purchase Return' },
         { icon: <Truck size={18} />, label: 'Transfer Request' },
         { icon: <Truck size={18} />, label: 'Stock Transfer' },
+        { icon: <RefreshCw size={18} />, label: 'Stock Return' },
         { icon: <FileText size={18} />, label: 'Sales Invoice' },
         { icon: <RefreshCw size={18} />, label: 'Sales Return' },
       ]
@@ -335,6 +337,22 @@ const App = () => {
       fiscalYear: currentUser?.fiscal_year_label,
       location: effectiveLocationId ? (loc?.location_name || currentUser?.location_name) : 'All Locations'
     };
+  };
+
+  const getFilteredSortedAccounts = () => {
+    const query = searchQuery.toLowerCase();
+    const filtered = accounts.filter(account => {
+        return (
+            (account.account_code || '').toLowerCase().includes(query) ||
+            (account.account_name || '').toLowerCase().includes(query) ||
+            (account.location_name || '').toLowerCase().includes(query) ||
+            (account.parent_name || '').toLowerCase().includes(query) ||
+            (account.creator_name || '').toLowerCase().includes(query)
+        );
+    });
+    return [...filtered].sort((a, b) => {
+        return (a.account_code || '').localeCompare(b.account_code || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
   };
 
   useEffect(() => {
@@ -547,6 +565,8 @@ const App = () => {
                 {activeTab === 'Transfer Request' && <Truck size={24} />}
                 {activeTab === 'Stock Report' && <FileText size={24} />}
                 {activeTab === 'Barcode Setup' && <Barcode size={24} />}
+                {activeTab === 'Sales Return' && <RefreshCw size={24} />}
+                {activeTab === 'Stock Return' && <RefreshCw size={24} />}
               </div>
               <div className="header-text">
                 <h1>{activeTab}</h1>
@@ -599,7 +619,7 @@ const App = () => {
               </div>
             )}
 
-            {['Receipts', 'Payments', 'Journal Vouchers', 'Ledgers', 'Trial Balance', 'Profit & Loss', 'Balance Sheet', 'Stock Purchase', 'Purchase Return', 'Transfer Request', 'Stock Transfer', 'Sales Invoice', 'Sales Return'].includes(activeTab) && (
+            {['Receipts', 'Payments', 'Journal Vouchers', 'Ledgers', 'Trial Balance', 'Profit & Loss', 'Balance Sheet', 'Stock Purchase', 'Purchase Return', 'Transfer Request', 'Stock Transfer', 'Stock Return', 'Sales Invoice', 'Sales Return'].includes(activeTab) && (
               <div className="report-date-filter animate-fade-in">
                 <div className="filter-group">
                   <label>From Date</label>
@@ -643,13 +663,8 @@ const App = () => {
               </div>
               {loading
                 ? <div style={{ padding: 60, textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
-                : <AccountTree
-                  accounts={searchQuery
-                    ? accounts.filter(a =>
-                      a.account_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      a.account_code.toLowerCase().includes(searchQuery.toLowerCase()))
-                    : treeAccounts
-                  }
+                : <AccountListTable
+                  accounts={accounts}
                   onEdit={(acc) => {
                     if (!isFYClosed) {
                       setEditingAccount(acc);
@@ -657,12 +672,9 @@ const App = () => {
                     }
                   }}
                   onDelete={isFYClosed ? null : handleDeleteAccount}
-                  onAdd={(parent) => {
-                    if (!isFYClosed) {
-                      setEditingAccount({ _parent: parent });
-                      setAccountModal(true);
-                    }
-                  }}
+                  currentUser={currentUser}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
                 />
               }
             </div>
@@ -928,13 +940,14 @@ const App = () => {
           )}
 
           {/* ── Inventory Ops ── */}
-          {activeTab === 'Stock Opening' && <InventoryTransactions initialType="STOCK_OPENING" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} />}
+          {activeTab === 'Stock Opening' && <InventoryTransactions initialType="STOCK_OPENING" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Purchase' && <InventoryTransactions initialType="PURCHASE" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Purchase Return' && <InventoryTransactions initialType="PURCHASE_RETURN" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Transfer Request' && <InventoryTransactions initialType="TRANSFER_REQUEST" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Transfer' && <InventoryTransactions initialType="TRANSFER" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} preloadData={transferPreload} onClearPreload={() => setTransferPreload(null)} />}
           {activeTab === 'Sales Invoice' && <InventoryTransactions initialType="SALES_INVOICE" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Sales Return' && <InventoryTransactions initialType="SALES_RETURN" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
+          {activeTab === 'Stock Return' && <InventoryTransactions initialType="STOCK_TRANSFER_RETURN" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Transactions' && <InventoryTransactions initialType="ALL" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Report' && <StockReport currentUser={currentUser} companyInfo={companyInfo} reportMeta={getReportMeta()} />}
         </div>
@@ -979,7 +992,7 @@ const App = () => {
         endpoint="/api/accounts/import"
         location_id={effectiveLocationId}
         fiscal_year_id={currentUser?.fiscal_year_id}
-        requiredHeaders={['Account Name', 'Parent ID']}
+        requiredHeaders={['account_code', 'account_name', 'account_type', 'location']}
         onComplete={fetchAccounts}
       />
 
@@ -995,21 +1008,56 @@ const App = () => {
           let title = activeTab;
 
           if (activeTab === 'Chart of Accounts') {
-            data = accounts.map(a => ({
-              id: a.id,
-              parent_id: a.parent_id || '',
-              account_code: a.account_code,
-              account_name: a.account_name,
-              account_type: a.account_type,
-              statement_type: a.statement_type || '',
-              inventory_module: a.inventory_module || '',
-              is_active: a.is_active ? 'TRUE' : 'FALSE',
-              location_id: a.location_id || ''
-            }));
-            headers = ['ID', 'Parent ID', 'Account Code', 'Account Name', 'Account Type', 'Statement Type', 'Inventory Module', 'Is Active', 'Location ID'];
-            fields = ['id', 'parent_id', 'account_code', 'account_name', 'account_type', 'statement_type', 'inventory_module', 'is_active', 'location_id'];
-            filename = 'Chart_of_Accounts_Data';
-            title = 'Chart of Accounts Report';
+            const pad = n => String(n).padStart(2, '0');
+            const d = new Date();
+            const filename = `ChartOfAccounts_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
+            
+            const filteredSorted = getFilteredSortedAccounts();
+            
+            if (filteredSorted.length === 0) {
+              alert('No records found to export.');
+              setExportModal(false);
+              return;
+            }
+
+            const exportData = filteredSorted.map(account => {
+              const isParent = account.is_main || accounts.some(a => a.parent_id === account.id);
+              const accountTypeLabel = isParent ? 'PARENT' : 'CHILD';
+              
+              const statementTypeLabel = account.statement_type === 'BALANCE_SHEET' ? 'Balance Sheet' :
+                                         account.statement_type === 'PROFIT_LOSS' ? 'Profit & Loss' :
+                                         account.statement_type === 'BOTH' ? 'Both' : (account.statement_type || '—');
+                                         
+              const inventoryMapped = account.inventory_module && account.inventory_module !== 'NONE' ? 'Yes' : 'No';
+              
+              return {
+                'Account Code': account.account_code,
+                'Account Name': account.account_name,
+                'Location': account.location_name || 'Global',
+                'Parent Account': account.parent_name || '—',
+                'Account Type': accountTypeLabel,
+                'Status': account.is_active ? 'Active' : 'Inactive',
+                'Statement Type': statementTypeLabel,
+                'Inventory Mapped': inventoryMapped,
+                'Created By': account.creator_name || 'System'
+              };
+            });
+            
+            if (format === 'EXCEL') {
+              const worksheet = XLSX.utils.json_to_sheet(exportData);
+              const workbook = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(workbook, worksheet, 'Chart of Accounts');
+              XLSX.writeFile(workbook, `${filename}.xlsx`);
+            } else {
+              const headers = ['Account Code', 'Account Name', 'Location', 'Parent Account', 'Account Type', 'Status', 'Statement Type', 'Inventory Mapped', 'Created By'];
+              const fields = ['Account Code', 'Account Name', 'Location', 'Parent Account', 'Account Type', 'Status', 'Statement Type', 'Inventory Mapped', 'Created By'];
+              printTable('Chart of Accounts Report', headers, exportData, fields, companyInfo, {
+                location: effectiveLocationId ? (locations.find(l => l.id === effectiveLocationId)?.location_name || currentUser?.location_name) : 'All Locations',
+                fiscalYear: currentUser?.fiscal_year_label
+              });
+            }
+            setExportModal(false);
+            return;
           } else if (activeTab === 'Trial Balance') {
             data = trialBalance.map(r => ({ code: r.account_code, name: r.account_name, type: r.account_type, dr: r.total_debit || 0, cr: r.total_credit || 0 }));
             headers = ['Code', 'Account Name', 'Type', 'Debit', 'Credit'];

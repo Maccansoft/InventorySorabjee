@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `fiscal_years` (
     `is_closed`   BOOLEAN      DEFAULT FALSE,
     `closed_at`   TIMESTAMP    NULL,
     `created_at`  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    `year_name`   VARCHAR(50)  GENERATED ALWAYS AS (`label`) VIRTUAL,
     INDEX (`is_active`, `is_closed`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

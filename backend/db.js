@@ -35,8 +35,15 @@ async function safeQuery(conn, label, sql, params = []) {
     await conn.query(sql, params);
     // console.log(`✓ ${label}`);
   } catch (err) {
-    if (err.code === 'ER_DUP_FIELDNAME' || err.code === 'ER_DUP_KEYNAME' || err.code === 'ER_CANT_DROP_FIELD_OR_KEY') {
-      // Ignore duplicate column/index errors
+    if (
+      err.code === 'ER_DUP_FIELDNAME' ||
+      err.code === 'ER_DUP_KEYNAME' ||
+      err.code === 'ER_CANT_DROP_FIELD_OR_KEY' ||
+      err.code === 'ER_FK_DUP_NAME' ||
+      err.errno === 121 ||
+      (err.code === 'ER_CANT_CREATE_TABLE' && err.message.includes('121'))
+    ) {
+      // Ignore duplicate column/index/foreign key errors
     } else {
       console.warn(`! ${label} failed: ${err.message}`);
     }
@@ -88,6 +95,7 @@ async function initDB() {
         is_closed   BOOLEAN      DEFAULT FALSE,
         closed_at   TIMESTAMP    NULL,
         created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        year_name   VARCHAR(50)  GENERATED ALWAYS AS (label) VIRTUAL,
         INDEX (is_active, is_closed)
       )
     `);
@@ -95,7 +103,20 @@ async function initDB() {
     await safeQuery(conn, 'fy.is_closed', 'ALTER TABLE fiscal_years ADD COLUMN is_closed BOOLEAN DEFAULT FALSE');
     await safeQuery(conn, 'fy.idx_active', 'CREATE INDEX idx_fy_active ON fiscal_years(is_active, is_closed)');
     await safeQuery(conn, 'fy.closed_at', 'ALTER TABLE fiscal_years ADD COLUMN closed_at TIMESTAMP NULL');
-    await safeQuery(conn, 'fy.rename_label', 'ALTER TABLE fiscal_years CHANGE COLUMN year_name label VARCHAR(50)');
+
+    // Only attempt to rename year_name to label if label does not exist yet.
+    // If year_name was already renamed or the database started with label,
+    // then label exists and year_name is a virtual generated column mapping to it.
+    const [fyCols] = await conn.query("SHOW COLUMNS FROM fiscal_years LIKE 'label'");
+    if (fyCols.length === 0) {
+      await safeQuery(conn, 'fy.rename_label', 'ALTER TABLE fiscal_years CHANGE COLUMN year_name label VARCHAR(50)');
+    }
+
+    // Ensure virtual generated column 'year_name' exists if it doesn't already
+    const [fyYearNameCols] = await conn.query("SHOW COLUMNS FROM fiscal_years LIKE 'year_name'");
+    if (fyYearNameCols.length === 0) {
+      await safeQuery(conn, 'fy.add_year_name', 'ALTER TABLE fiscal_years ADD COLUMN year_name VARCHAR(50) GENERATED ALWAYS AS (label) VIRTUAL');
+    }
 
     // 3. Users
     // 3. Users
@@ -289,6 +310,7 @@ async function initDB() {
       { name: 'sales_returns', details: 'sales_return_details', fk: 'sales_return_id' },
       { name: 'transfers', details: 'transfer_details', fk: 'transfer_id' },
       { name: 'transfer_requests', details: 'transfer_request_details', fk: 'request_id' },
+      { name: 'stock_transfer_returns', details: 'stock_transfer_return_items', fk: 'return_id' },
     ];
 
     for (const tx of txTables) {
@@ -355,8 +377,59 @@ async function initDB() {
     await safeQuery(conn, 'tr.txn_type', "ALTER TABLE transfer_requests ADD COLUMN transaction_type VARCHAR(20) DEFAULT 'TRQ'");
     await safeQuery(conn, 'tr.loc_code', 'ALTER TABLE transfer_requests ADD COLUMN location_code VARCHAR(20)');
     await safeQuery(conn, 'tr.fy_label', 'ALTER TABLE transfer_requests ADD COLUMN fiscal_year_label VARCHAR(50)');
+    await safeQuery(conn, 'tr_det.lot_no', 'ALTER TABLE transfer_request_details ADD COLUMN lot_no VARCHAR(100) NULL');
+    await safeQuery(conn, 'tr_det.sno', 'ALTER TABLE transfer_request_details ADD COLUMN sno VARCHAR(100) NULL');
+    await safeQuery(conn, 'tr_det.exp_date', 'ALTER TABLE transfer_request_details ADD COLUMN exp_date DATE NULL');
+    await safeQuery(conn, 'tr_det.mfg_date', 'ALTER TABLE transfer_request_details ADD COLUMN mfg_date DATE NULL');
     // Force fix any invalid/empty statuses to TRANSFERRED if they were previously WAITING_TRANSFER or got corrupted during ENUM change
     await conn.query(`UPDATE transfer_requests SET status = 'TRANSFERRED' WHERE status = 'WAITING_TRANSFER' OR status = '' OR status IS NULL`);
+      } else if (tx.name === 'stock_transfer_returns') {
+        // Create stock_transfer_returns header table
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS stock_transfer_returns (
+              id                           INT PRIMARY KEY AUTO_INCREMENT,
+              trans_no                     VARCHAR(50) UNIQUE NOT NULL,
+              trans_date                   DATE NOT NULL,
+              original_transfer_ref        VARCHAR(50) NOT NULL,
+              original_sending_location_id INT NOT NULL,
+              location_id                  INT NOT NULL,
+              fiscal_year_id               INT NOT NULL,
+              user_id                      INT NOT NULL,
+              created_at                   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              sequence_no                  INT DEFAULT 1,
+              transaction_type             VARCHAR(20) DEFAULT 'SRT',
+              location_code                VARCHAR(20),
+              fiscal_year_label            VARCHAR(50),
+              INDEX (location_id, fiscal_year_id),
+              CONSTRAINT fk_str_sending_loc FOREIGN KEY (original_sending_location_id) REFERENCES locations (id) ON DELETE RESTRICT,
+              CONSTRAINT fk_str_loc FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE,
+              CONSTRAINT fk_str_fy FOREIGN KEY (fiscal_year_id) REFERENCES fiscal_years (id) ON DELETE CASCADE,
+              CONSTRAINT fk_str_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+        `);
+        
+        // Create stock_transfer_return_items details table
+        await conn.query(`
+            CREATE TABLE IF NOT EXISTS stock_transfer_return_items (
+              id            INT PRIMARY KEY AUTO_INCREMENT,
+              return_id     INT NOT NULL,
+              barcode       VARCHAR(150),
+              maker_id      INT NOT NULL,
+              category_id   INT NOT NULL,
+              power_id      INT NULL,
+              lot_no        VARCHAR(100),
+              sno           VARCHAR(100),
+              mfg_date      DATE NULL,
+              exp_date      DATE NULL,
+              qty_received  DECIMAL(15,2) DEFAULT 0.00,
+              qty_return    DECIMAL(15,2) DEFAULT 0.00,
+              INDEX (return_id),
+              CONSTRAINT fk_stri_header FOREIGN KEY (return_id) REFERENCES stock_transfer_returns (id) ON DELETE CASCADE,
+              CONSTRAINT fk_stri_maker FOREIGN KEY (maker_id) REFERENCES makers (id) ON DELETE RESTRICT,
+              CONSTRAINT fk_stri_cat FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+              CONSTRAINT fk_stri_power FOREIGN KEY (power_id) REFERENCES powers (id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+        `);
       } else {
         const partyCol = tx.name.includes('purchase') ? 'supplier_id' : (tx.name.includes('sale') ? 'customer_id' : null);
         const partyTable = tx.name.includes('purchase') ? 'suppliers' : 'customers';

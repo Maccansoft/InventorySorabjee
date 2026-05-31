@@ -20,6 +20,64 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
 
     if (!isOpen) return null;
 
+    const downloadCoaTemplate = () => {
+        const headers = [
+            'account_code',
+            'account_name',
+            'parent_code',
+            'account_type',
+            'level',
+            'is_main',
+            'is_active',
+            'statement_type',
+            'inventory_module',
+            'location'
+        ];
+        const sampleData = [
+            {
+                account_code: 'A01',
+                account_name: 'ASSETS',
+                parent_code: '',
+                account_type: 'ASSETS',
+                level: 1,
+                is_main: 1,
+                is_active: 1,
+                statement_type: 'BALANCE_SHEET',
+                inventory_module: 'NONE',
+                location: 'ALL'
+            },
+            {
+                account_code: 'A01-001',
+                account_name: 'FIXED ASSETS',
+                parent_code: 'A01',
+                account_type: 'ASSETS',
+                level: 2,
+                is_main: 0,
+                is_active: 1,
+                statement_type: 'BALANCE_SHEET',
+                inventory_module: 'NONE',
+                location: 'ALL'
+            },
+            {
+                account_code: 'A01-001-001',
+                account_name: 'Computers Karachi',
+                parent_code: 'A01-001',
+                account_type: 'ASSETS',
+                level: 3,
+                is_main: 0,
+                is_active: 1,
+                statement_type: 'BALANCE_SHEET',
+                inventory_module: 'NONE',
+                location: 'KARACHI OFFICE'
+            }
+        ];
+
+        const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Chart_of_Accounts_Template');
+        XLSX.writeFile(workbook, 'Chart_of_Accounts_Import_Template.xlsx');
+    };
+
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
         if (selectedFile) {
@@ -107,6 +165,27 @@ const ImportModal = ({ isOpen, onClose, title, endpoint, fiscal_year_id, locatio
                             <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>
                                 Select a .csv or .xlsx file to import data. The format must match the exported template exactly.
                             </p>
+                            
+                            {title === "Chart of Accounts" && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>Excel Template</span>
+                                        <button 
+                                            onClick={downloadCoaTemplate}
+                                            className="btn-secondary"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.75rem', height: 'auto', border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', cursor: 'pointer' }}
+                                        >
+                                            <FileText size={14} /> Download Template
+                                        </button>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                                        <AlertCircle size={14} style={{ color: '#0284c7', flexShrink: 0, marginTop: 1 }} />
+                                        <p style={{ fontSize: '0.75rem', color: '#0284c7', margin: 0, lineHeight: 1.3 }}>
+                                            Use <strong>'ALL'</strong> for global accounts, or the exact branch name (e.g., KARACHI OFFICE). Uniqueness is enforced by <code>(account_code + location)</code>.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                             
                             <div className={`upload-zone ${file ? 'active' : ''}`} style={{
                                 border: '2px dashed #e2e8f0',

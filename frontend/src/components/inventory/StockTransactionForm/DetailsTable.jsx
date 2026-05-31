@@ -22,7 +22,8 @@ const DetailsTable = ({
                         <th style={{ ...thStyle, width: '100px' }}>Power</th>
                         {type === 'TRANSFER' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock Required</th>}
                         {type === 'TRANSFER_REQUEST' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock Received</th>}
-                        {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock In Hand</th>}
+                        {type === 'STOCK_TRANSFER_RETURN' && <th style={{ ...thStyle, width: '120px', textAlign: 'center' }}>Qty Received</th>}
+                        {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock In Hand</th>}
                         {!isTrq && (
                             <>
                                 <th style={{ ...thStyle, width: '150px' }}>Barcode Scan</th>
@@ -33,7 +34,7 @@ const DetailsTable = ({
                             </>
                         )}
                         <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>{isTrq ? 'Qty Request' : 'Qty'}</th>
-                        {(!isTrq && type !== 'TRANSFER') && (
+                        {(!isTrq && type !== 'TRANSFER' && type !== 'STOCK_TRANSFER_RETURN') && (
                             <>
                                 {type === 'SALES_INVOICE' ? (
                                     <>
@@ -144,8 +145,21 @@ const DetailsTable = ({
                                             ) : null}
                                         </td>
                                     )}
+                                    {/* Qty Received Column for Return */}
+                                    {type === 'STOCK_TRANSFER_RETURN' && (
+                                        <td style={tdStyle}>
+                                            {shouldShowParentFields ? (
+                                                <input 
+                                                    type="text" 
+                                                    value={formatQty(d.qty_received || 0)} 
+                                                    readOnly 
+                                                    style={{ ...inputStyle, textAlign: 'center', fontWeight: 700, color: '#475569', background: '#f8fafc' }} 
+                                                />
+                                            ) : null}
+                                        </td>
+                                    )}
                                     {/* Stock In Hand Column */}
-                                    {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && (
+                                    {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && (
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 800, color: '#475569' }}>
                                             {shouldShowParentFields ? formatQty(d.qty_in_hand || 0) : null}
                                         </td>
@@ -192,7 +206,7 @@ const DetailsTable = ({
                                     <td style={tdStyle}>
                                         <input ref={el => { if (refs) refs.current[`qty-${i}`] = el; }} type="text" value={formatQty(d.qty)} onChange={e => updateRow(i, 'qty', e.target.value.replace(/,/g, ''))} onKeyDown={e => handleQtyKeyDown(e, i)} style={{ ...inputStyle, textAlign: 'center', fontWeight: 800 }} />
                                     </td>
-                                    {(!isTrq && type !== 'TRANSFER') && (
+                                    {(!isTrq && type !== 'TRANSFER' && type !== 'STOCK_TRANSFER_RETURN') && (
                                         <>
                                             <td style={tdStyle}>
                                                 <input

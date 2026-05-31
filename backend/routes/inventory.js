@@ -15,6 +15,7 @@ const txConfigs = [
     { type: 'TRANSFER', path: 'transfers', table: 'transfers', detailsTable: 'transfer_details', fkCol: 'transfer_id', prefix: 'TRN', ledgerSync: false },
     { type: 'TRANSFER_REQUEST', path: 'transfer-requests', table: 'transfer_requests', detailsTable: 'transfer_request_details', fkCol: 'request_id', prefix: 'TRQ', ledgerSync: false },
     { type: 'STOCK_OPENING', path: 'opening-balances', table: 'stock_opening_balances', prefix: 'OB', ledgerSync: false, manual: true },
+    { type: 'STOCK_TRANSFER_RETURN', path: 'stock-transfer-returns', table: 'stock_transfer_returns', detailsTable: 'stock_transfer_return_items', fkCol: 'return_id', prefix: 'SRT', ledgerSync: false },
 ];
 
 // ─────────────────────────────────────────────
@@ -89,6 +90,18 @@ async function insertDetails(conn, table, fkCol, fkVal, details) {
             fkVal, d.maker_id, d.category_id, d.power_id || null,
             d.stock_required || 0, d.reqTransNo || null, d.barcode || null, d.lot_no || null, d.sno || null, d.mfg_date || null, d.exp_date || null,
             d.qty || 0, d.qty_in_hand || 0, d.rate || 0, d.amount || 0
+        ]);
+        return await conn.query(sql, [values]);
+    }
+
+    if (table === 'stock_transfer_return_items') {
+        const sql = `INSERT INTO ${table} 
+            (${fkCol}, barcode, maker_id, category_id, power_id, lot_no, sno, mfg_date, exp_date, qty_received, qty_return) 
+            VALUES ?`;
+        const values = details.map(d => [
+            fkVal, d.barcode || null, d.maker_id, d.category_id, d.power_id || null,
+            d.lot_no || null, d.sno || null, d.mfg_date || null, d.exp_date || null,
+            d.qty_received || 0, d.qty_return || 0
         ]);
         return await conn.query(sql, [values]);
     }
@@ -374,6 +387,90 @@ router.get('/sales-lookup', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get('/transfer-return-lookup', async (req, res) => {
+    try {
+        const { lot_no, sno, mfg_date, exp_date, to_location_id, fiscal_year_id } = req.query;
+        if (!lot_no || !to_location_id || !fiscal_year_id) {
+            return res.json({ found: false, error: 'Missing lot_no, to_location_id, or fiscal_year_id' });
+        }
+
+        let sql = `
+            SELECT td.maker_id, td.category_id, td.power_id, td.lot_no, td.sno, td.mfg_date, td.exp_date,
+                   m.name as maker_name, c.name as category_name, p.power as power_label,
+                   t.trans_no as original_transfer_ref, t.from_location_id as original_sending_location_id,
+                   loc.name as original_sending_location_name,
+                   SUM(td.qty) as total_received
+            FROM transfer_details td
+            JOIN transfers t ON td.transfer_id = t.id
+            JOIN makers m ON td.maker_id = m.id
+            JOIN categories c ON td.category_id = c.id
+            LEFT JOIN powers p ON td.power_id = p.id
+            JOIN locations loc ON t.from_location_id = loc.id
+            WHERE t.to_location_id = ? AND t.fiscal_year_id = ? AND td.lot_no = ?
+        `;
+
+        const params = [to_location_id, fiscal_year_id, lot_no.trim()];
+        if (sno && sno.trim() !== '') {
+            sql += " AND td.sno = ?";
+            params.push(sno.trim());
+        }
+        if (exp_date && exp_date !== 'null' && exp_date !== '') {
+            sql += " AND td.exp_date = ?";
+            params.push(exp_date);
+        }
+        if (mfg_date && mfg_date !== 'null' && mfg_date !== '') {
+            sql += " AND td.mfg_date = ?";
+            params.push(mfg_date);
+        }
+
+        sql += `
+            GROUP BY td.maker_id, td.category_id, td.power_id, td.lot_no, td.sno, td.mfg_date, td.exp_date,
+                     t.trans_no, t.from_location_id, loc.name
+            ORDER BY t.trans_date DESC, t.id DESC LIMIT 1
+        `;
+
+        const [transferRows] = await db.query(sql, params);
+        if (transferRows.length === 0) return res.json({ found: false });
+
+        const mainData = transferRows[0];
+        
+        // Count already returned quantity
+        const [returnRows] = await db.query(`
+            SELECT SUM(ri.qty_return) as total_returned 
+            FROM stock_transfer_return_items ri
+            JOIN stock_transfer_returns r ON ri.return_id = r.id
+            WHERE r.original_transfer_ref = ?
+              AND ri.maker_id = ?
+              AND ri.category_id = ?
+              AND (ri.power_id = ? OR (ri.power_id IS NULL AND ? IS NULL))
+              AND ri.lot_no = ?
+              AND (ri.sno = ? OR (ri.sno IS NULL AND ? IS NULL))
+        `, [
+            mainData.original_transfer_ref,
+            mainData.maker_id,
+            mainData.category_id,
+            mainData.power_id, mainData.power_id,
+            mainData.lot_no,
+            mainData.sno, mainData.sno
+        ]);
+
+        const totalReceived = parseFloat(mainData.total_received || 0);
+        const totalReturned = parseFloat(returnRows[0]?.total_returned || 0);
+
+        res.json({
+            found: true,
+            data: {
+                ...mainData,
+                qty_received: totalReceived,
+                total_returned: totalReturned,
+                qty_available: totalReceived - totalReturned
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─────────────────────────────────────────────
 // MASTERS CRUD
 // ─────────────────────────────────────────────
@@ -454,6 +551,28 @@ router.get('/get-category-rate/:id', async (req, res) => {
         const [[row]] = await db.query('SELECT rate FROM categories WHERE id = ?', [req.params.id]);
         res.json({ rate: row ? row.rate : 0 });
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/category-by-id/:id', async (req, res) => {
+    try {
+        const [[row]] = await db.query('SELECT name FROM categories WHERE id = ?', [req.params.id]);
+        res.json({ name: row ? row.name : '' });
+    } catch (err) {
+        console.error('[category-by-id] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/category-rate-by-name', async (req, res) => {
+    try {
+        const { name } = req.query;
+        if (!name) return res.json({ rate: 0 });
+        const [[row]] = await db.query('SELECT rate FROM categories WHERE TRIM(UPPER(name)) = TRIM(UPPER(?)) LIMIT 1', [name.trim()]);
+        res.json({ rate: row ? parseFloat(row.rate || 0) : 0 });
+    } catch (err) {
+        console.error('[category-rate-by-name] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/powers', async (req, res) => {
@@ -914,7 +1033,7 @@ const createTxEndPoints = (config) => {
 
             const fields = ['trans_no', 'trans_date', 'fiscal_year_id', 'user_id', 'location_id', 'sequence_no', 'location_code', 'fiscal_year_label', 'transaction_type'];
             const vals = [trans_no, trans_date, fiscal_year_id, user_id, location_id, sequence_no, location_code, fiscal_year_label, transaction_type];
-            if (table !== 'transfer_requests') { fields.push('total_amount'); vals.push(total_amount); }
+            if (table !== 'transfer_requests' && table !== 'stock_transfer_returns') { fields.push('total_amount'); vals.push(total_amount); }
 
             if (req.body.supplier_id && table.includes('purchase')) { fields.push('supplier_id'); vals.push(req.body.supplier_id); }
             if (req.body.customer_id && table.includes('sale')) { 
@@ -925,6 +1044,8 @@ const createTxEndPoints = (config) => {
                 }
                 fields.push('customer_id'); vals.push(req.body.customer_id); 
             }
+            if (req.body.original_transfer_ref && table === 'stock_transfer_returns') { fields.push('original_transfer_ref'); vals.push(req.body.original_transfer_ref); }
+            if (req.body.original_sending_location_id && table === 'stock_transfer_returns') { fields.push('original_sending_location_id'); vals.push(req.body.original_sending_location_id); }
             if (req.body.from_location_id && table === 'transfers') { fields.push('from_location_id'); vals.push(req.body.from_location_id); }
             if (req.body.to_location_id && (table === 'transfers' || table === 'transfer_requests')) { fields.push('to_location_id'); vals.push(req.body.to_location_id); }
             if (req.body.transfer_request_id && table === 'transfers') { fields.push('transfer_request_id'); vals.push(req.body.transfer_request_id); }
@@ -943,30 +1064,65 @@ const createTxEndPoints = (config) => {
             }
 
             if (config.type === 'TRANSFER') {
-                const syncMap = new Map();
+                const trqSyncMap = new Map();
                 (details || []).forEach(d => {
                     if (d.reqTransNo) {
                         const key = `${d.reqTransNo}|${d.maker_id}|${d.category_id}|${d.power_id || ''}`;
-                        syncMap.set(key, (syncMap.get(key) || 0) + parseFloat(d.qty || 0));
+                        if (!trqSyncMap.has(key)) {
+                            trqSyncMap.set(key, { qty: 0, lots: new Set(), snos: new Set(), mfgDates: new Set(), expDates: new Set() });
+                        }
+                        const entry = trqSyncMap.get(key);
+                        entry.qty += parseFloat(d.qty || 0);
+                        if (d.lot_no) entry.lots.add(d.lot_no);
+                        if (d.sno && d.sno !== '0' && d.sno !== '') entry.snos.add(d.sno);
+                        if (d.mfg_date) {
+                            try {
+                                const mDate = new Date(d.mfg_date);
+                                if (!isNaN(mDate.getTime())) {
+                                    entry.mfgDates.add(mDate.toISOString().split('T')[0]);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing mfg_date:', e);
+                            }
+                        }
+                        if (d.exp_date) {
+                            try {
+                                const eDate = new Date(d.exp_date);
+                                if (!isNaN(eDate.getTime())) {
+                                    entry.expDates.add(eDate.toISOString().split('T')[0]);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing exp_date:', e);
+                            }
+                        }
                     }
                 });
 
-                if (syncMap.size > 0) {
+                if (trqSyncMap.size > 0) {
                     const uniqueRequests = new Set();
-                    for (const [compositeKey, totalQty] of syncMap.entries()) {
+                    for (const [compositeKey, entry] of trqSyncMap.entries()) {
                         const [transNo, mId, cId, pId] = compositeKey.split('|');
                         uniqueRequests.add(transNo);
+
+                        const lotsStr = Array.from(entry.lots).join(', ').substring(0, 100);
+                        const snosStr = Array.from(entry.snos).join(', ').substring(0, 100);
+                        const mfgDate = entry.mfgDates.size > 0 ? Array.from(entry.mfgDates)[0] : null;
+                        const expDate = entry.expDates.size > 0 ? Array.from(entry.expDates)[0] : null;
 
                         // 1. Update Transfer Request Details (STOCK RECEIVED = Total Qty Transferred)
                         await conn.query(`
                             UPDATE transfer_request_details d
                             JOIN transfer_requests h ON d.request_id = h.id
-                            SET d.stock_received = ?
+                            SET d.stock_received = ?,
+                                d.lot_no = ?,
+                                d.sno = ?,
+                                d.mfg_date = ?,
+                                d.exp_date = ?
                             WHERE h.trans_no = ? 
                               AND d.maker_id = ? 
                               AND d.category_id = ? 
                               AND (d.power_id = ? OR (d.power_id IS NULL AND ? = ''))
-                        `, [totalQty, transNo, mId, cId, pId, pId]);
+                        `, [entry.qty, lotsStr || null, snosStr || null, mfgDate, expDate, transNo, mId, cId, pId, pId]);
                     }
 
                     // 2. Update Transfer Request Header (Status & Notification Seen)
@@ -1007,14 +1163,19 @@ const createTxEndPoints = (config) => {
                 location_id = null; // Head office super admin can view all
             }
 
-            let cols = 'h.*, m.name AS maker_name, c.name AS category_name, pw.power, d.qty ';
-            if (detailsTable === 'transfer_details') {
-                cols += ', d.stock_required, d.stock_req, d.qty_in_hand ';
-            } else if (detailsTable === 'transfer_request_details') {
-                cols += ', d.stock_received ';
-            }
-            if (table !== 'transfer_requests') {
-                cols += ', d.lot_no, d.sno, d.mfg_date, d.exp_date, d.rate, d.amount ';
+            let cols = 'h.*, m.name AS maker_name, c.name AS category_name, pw.power ';
+            if (table === 'stock_transfer_returns') {
+                cols += ', d.qty_return AS qty, d.qty_received, d.barcode, d.lot_no, d.sno, d.mfg_date, d.exp_date ';
+            } else {
+                cols += ', d.qty ';
+                if (detailsTable === 'transfer_details') {
+                    cols += ', d.stock_required, d.stock_req, d.qty_in_hand ';
+                } else if (detailsTable === 'transfer_request_details') {
+                    cols += ', d.stock_received, d.lot_no, d.sno, d.mfg_date, d.exp_date ';
+                }
+                if (table !== 'transfer_requests') {
+                    cols += ', d.lot_no, d.sno, d.mfg_date, d.exp_date, d.rate, d.amount ';
+                }
             }
 
             let sql = `SELECT ${cols} `;
@@ -1023,6 +1184,7 @@ const createTxEndPoints = (config) => {
             else if (table.includes('sale')) sql += `, s.name AS customer_name FROM ${table} h JOIN ${detailsTable} d ON h.id = d.${fkCol} LEFT JOIN customers s ON h.customer_id = s.id `;
             else if (table === 'transfers') sql += `, fl.name AS from_location_name, tl.name AS to_location_name FROM ${table} h JOIN ${detailsTable} d ON h.id = d.${fkCol} LEFT JOIN locations fl ON h.from_location_id = fl.id LEFT JOIN locations tl ON h.to_location_id = tl.id `;
             else if (table === 'transfer_requests') sql += `, tl.name AS to_location_name FROM ${table} h JOIN ${detailsTable} d ON h.id = d.${fkCol} LEFT JOIN locations tl ON h.to_location_id = tl.id `;
+            else if (table === 'stock_transfer_returns') sql += `, osl.name AS original_sending_location_name FROM ${table} h JOIN ${detailsTable} d ON h.id = d.${fkCol} LEFT JOIN locations osl ON h.original_sending_location_id = osl.id `;
             else sql += ` FROM ${table} h JOIN ${detailsTable} d ON h.id = d.${fkCol} `;
 
             sql += ` JOIN makers m ON d.maker_id = m.id JOIN categories c ON d.category_id = c.id LEFT JOIN powers pw ON d.power_id = pw.id WHERE 1=1 `;
@@ -1127,15 +1289,19 @@ const createTxEndPoints = (config) => {
                 }
                 await conn.query(`DELETE FROM ${table} WHERE id = ?`, [h.id]);
             } else {
-                const [[newTotals]] = await conn.query(`SELECT SUM(qty) as tQty, SUM(amount) as tAmt FROM ${detailsTable} WHERE ${fkCol} = ?`, [h.id]);
-                await conn.query(`UPDATE ${table} SET total_qty = ?, total_amount = ? WHERE id = ?`, [newTotals.tQty || 0, newTotals.tAmt || 0, h.id]);
-                if (ledgerSync) {
-                    await syncInventoryToLedger(conn, {
-                        tx_id: h.id, trans_no: h.trans_no, trans_date: h.trans_date,
-                        party_id: h.supplier_id || h.customer_id,
-                        total_amount: newTotals.tAmt || 0, location_id: h.location_id,
-                        fiscal_year_id: h.fiscal_year_id, type: config.type, headerTable: table
-                    });
+                if (table === 'stock_transfer_returns') {
+                    // Nothing to update for totals as they don't exist in header
+                } else {
+                    const [[newTotals]] = await conn.query(`SELECT SUM(qty) as tQty, SUM(amount) as tAmt FROM ${detailsTable} WHERE ${fkCol} = ?`, [h.id]);
+                    await conn.query(`UPDATE ${table} SET total_qty = ?, total_amount = ? WHERE id = ?`, [newTotals.tQty || 0, newTotals.tAmt || 0, h.id]);
+                    if (ledgerSync) {
+                        await syncInventoryToLedger(conn, {
+                            tx_id: h.id, trans_no: h.trans_no, trans_date: h.trans_date,
+                            party_id: h.supplier_id || h.customer_id,
+                            total_amount: newTotals.tAmt || 0, location_id: h.location_id,
+                            fiscal_year_id: h.fiscal_year_id, type: config.type, headerTable: table
+                        });
+                    }
                 }
             }
             await conn.commit();
@@ -1157,11 +1323,13 @@ const createTxEndPoints = (config) => {
 
             const fields = ['trans_date'];
             const vals = [trans_date];
-            if (table !== 'transfer_requests') { fields.push('total_amount'); vals.push(total_amount); }
+            if (table !== 'transfer_requests' && table !== 'stock_transfer_returns') { fields.push('total_amount'); vals.push(total_amount); }
             if (req.body.supplier_id && table.includes('purchase')) { fields.push('supplier_id'); vals.push(req.body.supplier_id); }
             if (req.body.customer_id && table.includes('sale')) { fields.push('customer_id'); vals.push(req.body.customer_id); }
             if (req.body.from_location_id && table === 'transfers') { fields.push('from_location_id'); vals.push(req.body.from_location_id); }
             if (req.body.to_location_id && (table === 'transfers' || table === 'transfer_requests')) { fields.push('to_location_id'); vals.push(req.body.to_location_id); }
+            if (req.body.original_transfer_ref && table === 'stock_transfer_returns') { fields.push('original_transfer_ref'); vals.push(req.body.original_transfer_ref); }
+            if (req.body.original_sending_location_id && table === 'stock_transfer_returns') { fields.push('original_sending_location_id'); vals.push(req.body.original_sending_location_id); }
 
             const setSql = fields.map(f => `${f}=?`).join(',');
             await conn.query(`UPDATE ${table} SET ${setSql} WHERE id=?`, [...vals, req.params.id]);
@@ -1317,7 +1485,7 @@ router.get('/opening-balances', async (req, res) => {
             location_id = null;
         }
 
-        let sql = `SELECT ob.*, m.name as maker_name, c.name as category_name, p.power FROM stock_opening_balances ob JOIN makers m ON ob.maker_id = m.id JOIN categories c ON ob.category_id = c.id LEFT JOIN powers p ON ob.power_id = p.id WHERE 1=1 `;
+        let sql = `SELECT ob.*, m.name as maker_name, c.name as category_name, p.power, l.name as location_name FROM stock_opening_balances ob JOIN makers m ON ob.maker_id = m.id JOIN categories c ON ob.category_id = c.id LEFT JOIN powers p ON ob.power_id = p.id LEFT JOIN locations l ON ob.location_id = l.id WHERE 1=1 `;
         const params = [];
         if (location_id) { sql += ' AND ob.location_id = ?'; params.push(location_id); }
         if (fiscal_year_id) { sql += ' AND ob.fiscal_year_id = ?'; params.push(fiscal_year_id); }
@@ -1654,10 +1822,14 @@ router.get('/stock-balance', async (req, res) => {
                 SELECT -d.qty FROM sales_details d JOIN sales h ON d.sale_id=h.id WHERE d.maker_id=? AND d.category_id=? AND d.power_id=? AND h.location_id=? AND h.fiscal_year_id=?
                 UNION ALL
                 SELECT d.qty FROM sales_return_details d JOIN sales_returns h ON d.sales_return_id=h.id WHERE d.maker_id=? AND d.category_id=? AND d.power_id=? AND h.location_id=? AND h.fiscal_year_id=?
+                UNION ALL
+                SELECT -d.qty_return FROM stock_transfer_return_items d JOIN stock_transfer_returns h ON d.return_id=h.id WHERE d.maker_id=? AND d.category_id=? AND d.power_id=? AND h.location_id=? AND h.fiscal_year_id=?
+                UNION ALL
+                SELECT d.qty_return FROM stock_transfer_return_items d JOIN stock_transfer_returns h ON d.return_id=h.id WHERE d.maker_id=? AND d.category_id=? AND d.power_id=? AND h.original_sending_location_id=? AND h.fiscal_year_id=?
             ) as t
         `;
         const p = [maker_id, category_id, power_id, location_id, fiscal_year_id];
-        const params = [...p, ...p, ...p, ...p, ...p, ...p, ...p];
+        const params = [...p, ...p, ...p, ...p, ...p, ...p, ...p, ...p, ...p];
         const [[{ balance }]] = await db.query(sql, params);
         res.json({ balance: balance || 0 });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1761,6 +1933,30 @@ router.get('/stock-report', async (req, res) => {
                 ${maker_id ? ' AND d.maker_id = ?' : ''}
                 ${category_id ? ' AND d.category_id = ?' : ''}
                 ${power_id ? ' AND d.power_id = ?' : ''}
+
+                UNION ALL
+
+                -- Transfer Returns Out (-)
+                SELECT d.maker_id, d.category_id, d.power_id, 0 AS opening_qty, 0 AS purchase_qty, 0 AS purchase_return_qty, -d.qty_return AS transfer_qty, 0 AS sales_qty, 0 AS sales_return_qty, -d.qty_return, h.location_id
+                FROM stock_transfer_return_items d
+                JOIN stock_transfer_returns h ON d.return_id = h.id
+                WHERE h.fiscal_year_id = ?
+                ${location_id ? ' AND h.location_id = ?' : ''}
+                ${maker_id ? ' AND d.maker_id = ?' : ''}
+                ${category_id ? ' AND d.category_id = ?' : ''}
+                ${power_id ? ' AND d.power_id = ?' : ''}
+
+                UNION ALL
+
+                -- Transfer Returns In (+)
+                SELECT d.maker_id, d.category_id, d.power_id, 0 AS opening_qty, 0 AS purchase_qty, 0 AS purchase_return_qty, d.qty_return AS transfer_qty, 0 AS sales_qty, 0 AS sales_return_qty, d.qty_return, h.original_sending_location_id AS location_id
+                FROM stock_transfer_return_items d
+                JOIN stock_transfer_returns h ON d.return_id = h.id
+                WHERE h.fiscal_year_id = ?
+                ${location_id ? ' AND h.original_sending_location_id = ?' : ''}
+                ${maker_id ? ' AND d.maker_id = ?' : ''}
+                ${category_id ? ' AND d.category_id = ?' : ''}
+                ${power_id ? ' AND d.power_id = ?' : ''}
             ) AS stock_data
             JOIN makers     m ON stock_data.maker_id    = m.id
             JOIN categories c ON stock_data.category_id = c.id
@@ -1781,7 +1977,9 @@ router.get('/stock-report', async (req, res) => {
             ...subQueryParams, // transfers out
             ...subQueryParams, // transfers in
             ...subQueryParams, // sales
-            ...subQueryParams  // sales_returns
+            ...subQueryParams, // sales_returns
+            ...subQueryParams, // transfer_returns out
+            ...subQueryParams  // transfer_returns in
         ];
 
         const [rows] = await db.query(sql, params);

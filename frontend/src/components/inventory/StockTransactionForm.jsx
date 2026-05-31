@@ -24,7 +24,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         'TRANSFER_REQUEST': { label: 'Stock Transfer Request', icon: <Truck />, color: '#7c3aed', bg: '#f5f3ff', endpoint: 'transfer-requests' },
         'TRANSFER': { label: 'Stock Transfer (Inter-Location)', icon: <Truck />, color: '#059669', bg: '#ecfdf5', endpoint: 'transfers' },
         'SALES_INVOICE': { label: 'Sales Invoice', icon: <FileText />, color: '#0891b2', bg: '#ecfeff', endpoint: 'sales' },
-        'SALES_RETURN': { label: 'Sales Return', icon: <RefreshCw />, color: '#ea580c', bg: '#fff7ed', endpoint: 'sales-returns' }
+        'SALES_RETURN': { label: 'Sales Return', icon: <RefreshCw />, color: '#ea580c', bg: '#fff7ed', endpoint: 'sales-returns' },
+        'STOCK_TRANSFER_RETURN': { label: 'Stock Return', icon: <RefreshCw />, color: '#f43f5e', bg: '#fff1f2', endpoint: 'stock-transfer-returns' }
     };
     const currentType = typeInfo[type] || typeInfo['PURCHASE'];
     const { label, icon, color, endpoint } = currentType;
@@ -59,10 +60,12 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         total_amount: 0,
         total_qty: 0,
         transfer_request_id: '',
+        original_transfer_ref: '',
+        original_sending_location_id: '',
     });
 
     const isRequestType = type === 'TRANSFER_REQUEST';
-    const isOutgoing = ['SALES_INVOICE', 'TRANSFER', 'PURCHASE_RETURN', 'TRANSFER_REQUEST', 'SALES_RETURN'].includes(type);
+    const isOutgoing = ['SALES_INVOICE', 'TRANSFER', 'PURCHASE_RETURN', 'TRANSFER_REQUEST', 'SALES_RETURN', 'STOCK_TRANSFER_RETURN'].includes(type);
 
     const [details, setDetails] = useState([{
         maker_id: '', category_id: '', power_id: '',
@@ -264,11 +267,21 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         if (field === 'qty') {
             const row = newDetails[idx];
             // Block quantity update if Lot/SNo is missing for Sales Invoice/Return
-            if ((type === 'SALES_INVOICE' || type === 'SALES_RETURN') && (!row.lot_no || !row.sno || row.sno === '0')) {
+            if ((type === 'SALES_INVOICE' || type === 'SALES_RETURN' || type === 'STOCK_TRANSFER_RETURN') && (!row.lot_no || !row.sno || row.sno === '0')) {
                 alert("Please scan barcode or enter Lot/SNo before entering quantity.");
                 return;
             }
             const cleanVal = val === '' ? '' : Math.floor(Math.max(0, parseFloat(val || 0)));
+            
+            if (type === 'STOCK_TRANSFER_RETURN') {
+                const qty_avail = parseFloat(row.qty_received || 0) - parseFloat(row.total_returned || 0);
+                if (cleanVal > qty_avail) {
+                    alert(`Qty Return (${cleanVal}) exceeds remaining available qty to return (${qty_avail}).`);
+                    return;
+                }
+                newDetails[idx].qty_return = cleanVal;
+            }
+
             newDetails[idx].qty = cleanVal;
             const r = parseFloat(newDetails[idx].rate || 0);
             newDetails[idx].amount = Math.round((parseFloat(cleanVal) || 0) * r);
@@ -391,6 +404,97 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         console.log(`[BarcodeScan] Row ${idx} | Maker: ${makerName || 'Searching All Masters'} | Barcode: ${val}`);
 
         try {
+            if (type === 'STOCK_TRANSFER_RETURN') {
+                // Call barcode-lookup to decode barcode first
+                const { data: decodeData } = await axios.get(`${API}/barcode-lookup`, { 
+                    params: { barcode: val } 
+                });
+
+                if (!decodeData.found) {
+                    alert("Barcode structure not matched in format setup. Scanning blocked.");
+                    return;
+                }
+
+                // Call transfer-return-lookup
+                const { data: lookupData } = await axios.get(`${API}/transfer-return-lookup`, {
+                    params: {
+                        lot_no: decodeData.lot_no,
+                        sno: decodeData.sno,
+                        mfg_date: decodeData.mfg_date,
+                        exp_date: decodeData.exp_date,
+                        to_location_id: currentUser.location_id,
+                        fiscal_year_id: currentUser.fiscal_year_id
+                    }
+                });
+
+                if (!lookupData.found) {
+                    alert(`No received stock transfer found matching Lot #${decodeData.lot_no} / SNo #${decodeData.sno || '0'}.`);
+                    return;
+                }
+
+                const item = lookupData.data;
+
+                // Check remaining available return qty
+                if (item.qty_available <= 0) {
+                    alert(`This item (Lot #${item.lot_no} / SNo #${item.sno || '0'}) has already been fully returned (Received: ${item.qty_received}, Returned: ${item.total_returned}).`);
+                    return;
+                }
+
+                // Check duplicate scans in current form
+                const isLocalDuplicate = details.some((row, i) => i !== idx && row.lot_no === item.lot_no && row.sno === item.sno);
+                if (isLocalDuplicate) {
+                    alert(`Duplicate Scan: Lot #${item.lot_no} / SNo #${item.sno || '0'} is already added in this return.`);
+                    return;
+                }
+
+                // Auto-fill header sending location and ref if not set
+                setHeader(prev => ({
+                    ...prev,
+                    original_transfer_ref: prev.original_transfer_ref || item.original_transfer_ref,
+                    original_sending_location_id: prev.original_sending_location_id || item.original_sending_location_id
+                }));
+
+                const newDetails = [...details];
+                newDetails[idx] = {
+                    ...newDetails[idx],
+                    barcode: '', // Clear/refresh barcode scan field on UI
+                    scanned_barcode: val, // Store scanned barcode for saving
+                    maker_id: item.maker_id,
+                    category_id: item.category_id,
+                    power_id: item.power_id,
+                    lot_no: item.lot_no,
+                    sno: item.sno || '0',
+                    mfg_date: item.mfg_date ? item.mfg_date.split('T')[0] : '',
+                    exp_date: item.exp_date ? item.exp_date.split('T')[0] : '',
+                    qty_received: item.qty_received,
+                    qty: 1,
+                    qty_return: 1,
+                    total_returned: item.total_returned
+                };
+
+                // Fetch categories if maker changed
+                axios.get(`${API}/categories?maker_id=${item.maker_id}`)
+                    .then(res => setRowCategories(prev => ({ ...prev, [item.maker_id]: res.data })));
+
+                setDetails(newDetails);
+                calculateTotals(newDetails);
+
+                // Auto add row and focus new barcode field
+                if (idx === newDetails.length - 1) {
+                    addRow(idx);
+                    setTimeout(() => {
+                        if (inputRefs.current[`barcode-${idx + 1}`]) {
+                            inputRefs.current[`barcode-${idx + 1}`].focus();
+                        }
+                    }, 150);
+                } else {
+                    if (inputRefs.current[`barcode-${idx + 1}`]) {
+                        inputRefs.current[`barcode-${idx + 1}`].focus();
+                    }
+                }
+                return;
+            }
+
             const { data } = await axios.get(`${API}/barcode-lookup`, { 
                 params: { barcode: val, maker: makerName } 
             });
@@ -574,6 +678,36 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         if (val) executeBarcodeLookup(idx, val);
     };
 
+    const fetchCategoryRate = async (categoryName, idx) => {
+        if (!categoryName) return;
+        try {
+            const { data } = await axios.get(`${API}/category-rate-by-name`, {
+                params: { name: categoryName }
+            });
+            if (data && data.rate !== undefined && data.rate > 0) {
+                const categoryRate = parseFloat(data.rate);
+                setDetails(prev => {
+                    const next = [...prev];
+                    if (!next[idx]) return prev;
+                    next[idx].rate = categoryRate;
+                    next[idx].p_rate = categoryRate;
+                    next[idx].amount = Math.round(parseFloat(next[idx].qty || 0) * categoryRate);
+                    return next;
+                });
+                
+                // Recalculate totals
+                setTimeout(() => {
+                    setDetails(current => {
+                        calculateTotals(current);
+                        return current;
+                    });
+                }, 50);
+            }
+        } catch (err) {
+            console.error("[CategoryRate] Fetch Error:", err);
+        }
+    };
+
     const enrichDataFromLotNo = async (lotNo, idx, passedSno = null) => {
         const enrichmentTypes = ['PURCHASE_RETURN', 'TRANSFER', 'SALES_INVOICE', 'SALES_RETURN'];
         if (!enrichmentTypes.includes(type) || !lotNo) return;
@@ -616,6 +750,16 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 if (makerId) {
                     axios.get(`${API}/categories?maker_id=${makerId}`)
                         .then(res => setRowCategories(prev => ({ ...prev, [makerId]: res.data })));
+                }
+
+                if (type === 'SALES_INVOICE') {
+                    axios.get(`${API}/category-by-id/${data.category_id}`)
+                        .then(catRes => {
+                            if (catRes.data && catRes.data.name) {
+                                fetchCategoryRate(catRes.data.name, idx);
+                            }
+                        })
+                        .catch(err => console.error("[CategoryRate] Error fetching category name:", err));
                 }
             }
         } catch (e) { console.warn("[Enrichment] No match found for lot:", lotNo); }
@@ -715,6 +859,18 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
             return;
         }
 
+        // --- VALIDATION FOR STOCK TRANSFER RETURNS ---
+        if (type === 'STOCK_TRANSFER_RETURN') {
+            if (!header.original_transfer_ref) {
+                alert("Please specify or scan items to populate Original Transfer Reference.");
+                return;
+            }
+            if (!header.original_sending_location_id) {
+                alert("Please select Original Sending Location.");
+                return;
+            }
+        }
+
         setIsSaving(true);
         try {
             // -- DUPLICATE LOT & SNO VALIDATION --
@@ -752,10 +908,17 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                         alert(`Row ${i + 1}: Quantity must be greater than 0.`);
                         setIsSaving(false); return;
                     }
-                    if (type !== 'TRANSFER_REQUEST' && parseFloat(row.qty) > parseFloat(row.qty_in_hand || 0)) {
+                    if (type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && parseFloat(row.qty) > parseFloat(row.qty_in_hand || 0)) {
                         const mName = makers.find(m => m.id === row.maker_id)?.name || 'Item';
                         alert(`Row ${i + 1} (${mName}): Requested quantity exceeds available stock (${row.qty_in_hand || 0}).`);
                         setIsSaving(false); return;
+                    }
+                    if (type === 'STOCK_TRANSFER_RETURN') {
+                        const qty_avail = parseFloat(row.qty_received || 0) - parseFloat(row.total_returned || 0);
+                        if (parseFloat(row.qty) > qty_avail) {
+                            alert(`Row ${i + 1}: Qty Return (${row.qty}) exceeds remaining available qty to return (${qty_avail}).`);
+                            setIsSaving(false); return;
+                        }
                     }
                     // Date Validation
                     if (row.exp_date && row.mfg_date && row.exp_date <= row.mfg_date) {
@@ -770,7 +933,10 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 location_id: currentUser.location_id,
                 fiscal_year_id: currentUser.fiscal_year_id,
                 user_id: currentUser.id,
-                details: details.filter(d => d.maker_id && d.category_id) 
+                details: details.filter(d => d.maker_id && d.category_id).map(d => ({
+                    ...d,
+                    barcode: d.scanned_barcode || d.barcode
+                }))
             };
 
             const method = editId ? 'put' : 'post';
@@ -829,7 +995,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                                     value={header.trans_no || (() => {
                                         const p = {
                                             'STOCK_OPENING': 'OB', 'PURCHASE': 'PUR', 'PURCHASE_RETURN': 'PRT',
-                                            'SALES_INVOICE': 'SLE', 'SALES_RETURN': 'SRT', 'TRANSFER': 'TRN', 'TRANSFER_REQUEST': 'TRQ'
+                                            'SALES_INVOICE': 'SLE', 'SALES_RETURN': 'SRT', 'TRANSFER': 'TRN', 'TRANSFER_REQUEST': 'TRQ',
+                                            'STOCK_TRANSFER_RETURN': 'SRT'
                                         }[type] || '???';
                                         const loc = currentUser?.location_code || (currentUser?.location_name ? currentUser.location_name.substring(0, 3).toUpperCase() : '...');
                                         const fy = currentUser?.fiscal_year_label || '....';
@@ -894,6 +1061,32 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                                         disabled={!!preloadData}
                                     />
                                 </div>
+                            )}
+
+                            {type === 'STOCK_TRANSFER_RETURN' && (
+                                <>
+                                    <div>
+                                        <label style={labelStyle}>Original Transfer Ref</label>
+                                        <input 
+                                            type="text" 
+                                            value={header.original_transfer_ref} 
+                                            onChange={e => setHeader({ ...header, original_transfer_ref: e.target.value })} 
+                                            style={inputStyle} 
+                                            placeholder="Auto-filled on scan" 
+                                            required 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>Original Sending Location</label>
+                                        <SearchableSelect 
+                                            options={(locations || []).filter(l => l.id !== currentUser.location_id).map(l => ({ value: l.id, label: l.name }))} 
+                                            value={header.original_sending_location_id} 
+                                            onChange={val => setHeader({ ...header, original_sending_location_id: val })} 
+                                            placeholder="Select Sending Location" 
+                                            required
+                                        />
+                                    </div>
+                                </>
                             )}
                         </div>
 

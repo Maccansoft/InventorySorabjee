@@ -7,7 +7,9 @@ import { ChevronRight, ChevronDown, Folder, Box, Edit2, Trash2, Plus, MapPin } f
  */
 const AccountNode = ({ account, accounts, level = 0, onEdit, onDelete, onAdd }) => {
     const [open, setOpen] = useState(level < 2); // auto-open first 2 levels
-    const children = account.children || accounts.filter(acc => acc.parent_id === account.id);
+    const children = (account.children || accounts.filter(acc => acc.parent_id === account.id)).sort((a, b) => {
+        return (a.account_code || '').localeCompare(b.account_code || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
     const hasChildren = children.length > 0;
 
     return (
@@ -92,9 +94,11 @@ const AccountNode = ({ account, accounts, level = 0, onEdit, onDelete, onAdd }) 
 const AccountTree = ({ accounts, onEdit, onDelete, onAdd }) => {
     // If it's a nested tree, root items are the ones in the array.
     // If it's a flat list (e.g. search), we filter items with no parent.
-    const rootAccounts = accounts.some(a => a.children)
+    const rootAccounts = (accounts.some(a => a.children)
         ? accounts
-        : accounts.filter(acc => !acc.parent_id);
+        : accounts.filter(acc => !acc.parent_id)).sort((a, b) => {
+            return (a.account_code || '').localeCompare(b.account_code || '', undefined, { numeric: true, sensitivity: 'base' });
+        });
 
     if (rootAccounts.length === 0) {
         return (
