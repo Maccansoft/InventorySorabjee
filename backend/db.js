@@ -212,6 +212,7 @@ async function initDB() {
     await safeQuery(conn, 'vouchers.txn_type', 'ALTER TABLE vouchers ADD COLUMN transaction_type VARCHAR(20)');
     await safeQuery(conn, 'vouchers.loc_code', 'ALTER TABLE vouchers ADD COLUMN location_code VARCHAR(20)');
     await safeQuery(conn, 'vouchers.fy_label', 'ALTER TABLE vouchers ADD COLUMN fiscal_year_label VARCHAR(50)');
+    await safeQuery(conn, 'vouchers.uq_voucher_composite', 'ALTER TABLE vouchers ADD UNIQUE INDEX uq_voucher_composite (voucher_no, location_id, fiscal_year_id, voucher_type)');
 
     // 7. Voucher Entries
     await conn.query(`

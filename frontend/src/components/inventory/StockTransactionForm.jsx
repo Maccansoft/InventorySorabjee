@@ -245,7 +245,7 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
             }
         }
 
-        const shouldFetchStock = (type !== 'STOCK_OPENING') && (field === 'maker_id' || field === 'category_id');
+        const shouldFetchStock = (type !== 'STOCK_OPENING' && type !== 'SALES_RETURN') && (field === 'maker_id' || field === 'category_id');
         if (shouldFetchStock) {
             const { maker_id, category_id, power_id } = newDetails[idx];
             if (maker_id && category_id && power_id) {
@@ -312,7 +312,7 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
     };
 
     const triggerStockInHandCalculation = (idx, rowData) => {
-        if (type === 'TRANSFER_REQUEST') return; // REMOVE Stock In Hand logic for TRQ
+        if (type === 'TRANSFER_REQUEST' || type === 'SALES_RETURN') return; // REMOVE Stock In Hand logic for TRQ and SRT
         const { maker_id, category_id, power_id } = rowData;
         if (type !== 'STOCK_OPENING' && maker_id && category_id) {
             axios.get(`${API}/stock-balance`, {
@@ -592,8 +592,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 // --- SMART AUTOMATION: ROW COMPLETION ---
                 handleBarcodeComplete(idx, newDetails);
 
-                // Fetch Stock balance (Only if NOT a Transfer Request)
-                if (type !== 'TRANSFER_REQUEST') {
+                // Fetch Stock balance (Only if NOT a Transfer Request or Sales Return)
+                if (type !== 'TRANSFER_REQUEST' && type !== 'SALES_RETURN') {
                     const { category_id, power_id } = newDetails[idx];
                 if (finalMakerId && category_id && power_id) {
                     const { data: balData } = await axios.get(`${API}/stock-balance`, {
@@ -908,7 +908,7 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                         alert(`Row ${i + 1}: Quantity must be greater than 0.`);
                         setIsSaving(false); return;
                     }
-                    if (type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && parseFloat(row.qty) > parseFloat(row.qty_in_hand || 0)) {
+                    if (type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && type !== 'SALES_RETURN' && parseFloat(row.qty) > parseFloat(row.qty_in_hand || 0)) {
                         const mName = makers.find(m => m.id === row.maker_id)?.name || 'Item';
                         alert(`Row ${i + 1} (${mName}): Requested quantity exceeds available stock (${row.qty_in_hand || 0}).`);
                         setIsSaving(false); return;

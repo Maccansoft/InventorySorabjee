@@ -1,4 +1,5 @@
 const db = require('../db');
+const { getNextJVNumber, checkVoucherNoExists } = require('./voucherHelper');
 
 /**
  * Generic sync to ledger for inventory transactions.
@@ -83,23 +84,17 @@ async function syncInventoryToLedger(conn, {
     if (!voucherId || !voucher_no) {
         const voucher_type = 'JOURNAL';
         const typeCode = 'JV';
-        const [[{ count }]] = await conn.query(
-            'SELECT COUNT(*) as count FROM vouchers WHERE voucher_type = ? AND location_id = ? AND fiscal_year_id = ?',
-            [voucher_type, location_id, fiscal_year_id]
-        );
 
-        let locCode = 'HO';
-        if (location_id) {
-            const [[loc]] = await conn.query('SELECT code FROM locations WHERE id = ?', [location_id]);
-            if (loc && loc.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
-        }
+        const result = await getNextJVNumber(conn, location_id, fiscal_year_id);
+        voucher_no = result.voucher_no;
+        const nextSeq = result.sequence_no;
+        const locCode = result.locCode;
+        const fyLabel = result.fyLabel;
 
-        if (type === 'SALES_INVOICE') {
-            const nextSeq = String(count + 1).padStart(4, '0');
-            voucher_no = `JV/${locCode}/${fyLabel}/${nextSeq}`;
-        } else {
-            let locStr = locCode !== 'HO' ? `-${locCode}` : '';
-            voucher_no = `${typeCode}${locStr}/${count + 1}`;
+        // Safe duplicate check
+        const exists = await checkVoucherNoExists(conn, voucher_no);
+        if (exists) {
+            throw new Error(`Duplicate voucher number detected: JV number ${voucher_no} already exists for the selected location and fiscal year.`);
         }
 
         let description = `${type.replace('_', ' ')}: ${partyName} - Ref: ${trans_no}`;
@@ -108,9 +103,9 @@ async function syncInventoryToLedger(conn, {
         }
 
         const [vRes] = await conn.query(
-            `INSERT INTO vouchers (voucher_no, voucher_type, date, description, total_amount, location_id, fiscal_year_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [voucher_no, voucher_type, trans_date, description, total_amount, location_id, fiscal_year_id]
+            `INSERT INTO vouchers (voucher_no, voucher_type, date, description, total_amount, location_id, fiscal_year_id, sequence_no, transaction_type, location_code, fiscal_year_label)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [voucher_no, voucher_type, trans_date, description, total_amount, location_id, fiscal_year_id, nextSeq, typeCode, locCode, fyLabel]
         );
         voucherId = vRes.insertId;
         await conn.query(`UPDATE ${headerTable} SET voucher_id = ? WHERE id = ?`, [voucherId, tx_id]);

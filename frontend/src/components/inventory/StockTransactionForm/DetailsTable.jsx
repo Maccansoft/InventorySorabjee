@@ -23,7 +23,7 @@ const DetailsTable = ({
                         {type === 'TRANSFER' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock Required</th>}
                         {type === 'TRANSFER_REQUEST' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock Received</th>}
                         {type === 'STOCK_TRANSFER_RETURN' && <th style={{ ...thStyle, width: '120px', textAlign: 'center' }}>Qty Received</th>}
-                        {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock In Hand</th>}
+                        {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && type !== 'SALES_RETURN' && <th style={{ ...thStyle, width: '100px', textAlign: 'center' }}>Stock In Hand</th>}
                         {!isTrq && (
                             <>
                                 <th style={{ ...thStyle, width: '150px' }}>Barcode Scan</th>
@@ -159,7 +159,7 @@ const DetailsTable = ({
                                         </td>
                                     )}
                                     {/* Stock In Hand Column */}
-                                    {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && (
+                                    {type !== 'STOCK_OPENING' && type !== 'TRANSFER_REQUEST' && type !== 'STOCK_TRANSFER_RETURN' && type !== 'SALES_RETURN' && (
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 800, color: '#475569' }}>
                                             {shouldShowParentFields ? formatQty(d.qty_in_hand || 0) : null}
                                         </td>

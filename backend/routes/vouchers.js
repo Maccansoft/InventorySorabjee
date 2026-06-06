@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { getNextJVNumber, checkVoucherNoExists } = require('../utils/voucherHelper');
 
 // ── GET /api/vouchers  ─────────────────────────────────────────────────────
 // Query params: ?type=RECEIPT&mode=CASH&fromDate=...&toDate=...&location_id=...&fiscal_year_id=...&all_locations=true
@@ -55,28 +56,35 @@ router.get('/next-no', async (req, res) => {
         const voucherType = (req.query.type || 'RECEIPT').toUpperCase();
         const location_id = req.query.location_id;
         const fiscal_year_id = req.query.fiscal_year_id;
-        const typeCode = voucherType === 'PAYMENT' ? 'PV'
-            : voucherType === 'RECEIPT' ? 'RV' : 'JV';
 
-        const [[{ maxSeq }]] = await db.query(
-            'SELECT MAX(sequence_no) as maxSeq FROM vouchers WHERE voucher_type = ? AND location_id = ? AND fiscal_year_id = ?',
-            [voucherType, location_id, fiscal_year_id]
-        );
-        const nextSeq = (maxSeq || 0) + 1;
+        if (voucherType === 'JOURNAL') {
+            const result = await getNextJVNumber(db, location_id, fiscal_year_id);
+            res.json({ 
+                voucher_no: result.voucher_no,
+                sequence_no: result.sequence_no 
+            });
+        } else {
+            const typeCode = voucherType === 'PAYMENT' ? 'PV' : 'RV';
+            const [[{ maxSeq }]] = await db.query(
+                'SELECT MAX(sequence_no) as maxSeq FROM vouchers WHERE voucher_type = ? AND location_id = ? AND fiscal_year_id = ?',
+                [voucherType, location_id, fiscal_year_id]
+            );
+            const nextSeq = (maxSeq || 0) + 1;
 
-        let locCode = 'HO';
-        if (location_id) {
-            const [[loc]] = await db.query('SELECT code FROM locations WHERE id = ?', [location_id]);
-            if (loc?.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
+            let locCode = 'HO';
+            if (location_id) {
+                const [[loc]] = await db.query('SELECT code FROM locations WHERE id = ?', [location_id]);
+                if (loc?.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
+            }
+
+            const [[fy]] = await db.query('SELECT label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
+            const fyLabel = fy ? fy.label : new Date().getFullYear();
+
+            res.json({ 
+                voucher_no: `${typeCode}/${locCode}/${fyLabel}/${String(nextSeq).padStart(4, '0')}`,
+                sequence_no: nextSeq 
+            });
         }
-
-        const [[fy]] = await db.query('SELECT label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
-        const fyLabel = fy ? fy.label : new Date().getFullYear();
-
-        res.json({ 
-            voucher_no: `${typeCode}/${locCode}/${fyLabel}/${String(nextSeq).padStart(4, '0')}`,
-            sequence_no: nextSeq 
-        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -130,22 +138,42 @@ router.post('/', async (req, res) => {
         await conn.beginTransaction();
 
         // 1. Generate Voucher Number (Standardized)
-        const typeCode = (voucher_type === 'PAYMENT') ? 'PV' : (voucher_type === 'RECEIPT') ? 'RV' : 'JV';
-        const [[{ maxSeq }]] = await conn.query(
-            'SELECT MAX(sequence_no) as maxSeq FROM vouchers WHERE voucher_type = ? AND location_id = ? AND fiscal_year_id = ?',
-            [voucher_type, location_id, fiscal_year_id]
-        );
-        const nextSeq = (maxSeq || 0) + 1;
-
+        let voucher_no;
+        let nextSeq;
         let locCode = 'HO';
-        if (location_id) {
-            const [[loc]] = await conn.query('SELECT code FROM locations WHERE id = ?', [location_id]);
-            if (loc?.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
-        }
+        let fyLabel = new Date().getFullYear();
+        let typeCode;
 
-        const [[fy]] = await conn.query('SELECT label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
-        const fyLabel = fy ? fy.label : new Date().getFullYear();
-        const voucher_no = `${typeCode}/${locCode}/${fyLabel}/${String(nextSeq).padStart(4, '0')}`;
+        if (voucher_type === 'JOURNAL') {
+            const result = await getNextJVNumber(conn, location_id, fiscal_year_id);
+            voucher_no = result.voucher_no;
+            nextSeq = result.sequence_no;
+            locCode = result.locCode;
+            fyLabel = result.fyLabel;
+            typeCode = 'JV';
+
+            // Safe duplicate check
+            const exists = await checkVoucherNoExists(conn, voucher_no);
+            if (exists) {
+                throw new Error(`Duplicate voucher number detected: JV number ${voucher_no} already exists for the selected location and fiscal year.`);
+            }
+        } else {
+            typeCode = (voucher_type === 'PAYMENT') ? 'PV' : 'RV';
+            const [[{ maxSeq }]] = await conn.query(
+                'SELECT MAX(sequence_no) as maxSeq FROM vouchers WHERE voucher_type = ? AND location_id = ? AND fiscal_year_id = ?',
+                [voucher_type, location_id, fiscal_year_id]
+            );
+            nextSeq = (maxSeq || 0) + 1;
+
+            if (location_id) {
+                const [[loc]] = await conn.query('SELECT code FROM locations WHERE id = ?', [location_id]);
+                if (loc?.code && loc.code !== 'XX') locCode = loc.code.toUpperCase();
+            }
+
+            const [[fy]] = await conn.query('SELECT label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
+            fyLabel = fy ? fy.label : new Date().getFullYear();
+            voucher_no = `${typeCode}/${locCode}/${fyLabel}/${String(nextSeq).padStart(4, '0')}`;
+        }
 
         // 2. Insert Voucher Header
         const [vRes] = await conn.query(
