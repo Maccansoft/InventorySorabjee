@@ -263,8 +263,8 @@ router.post('/import', async (req, res) => {
                 const inventoryModule = rawInvMod !== undefined && rawInvMod !== null && String(rawInvMod).trim() !== ''
                     ? String(rawInvMod).trim().toUpperCase()
                     : 'NONE';
-                if (!['STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'NONE'].includes(inventoryModule)) {
-                    throw new Error(`Invalid inventory_module: '${inventoryModule}'. Must be STOCK_PURCHASE, PURCHASE_RETURN, SALES_INVOICE, SALES_RETURN, or NONE`);
+                if (!['STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'RECEIVABLES', 'PAYABLES', 'NONE'].includes(inventoryModule)) {
+                    throw new Error(`Invalid inventory_module: '${inventoryModule}'. Must be STOCK_PURCHASE, PURCHASE_RETURN, SALES_INVOICE, SALES_RETURN, RECEIVABLES, PAYABLES, or NONE`);
                 }
 
                 // Parse booleans

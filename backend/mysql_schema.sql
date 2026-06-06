@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `chart_of_accounts` (
     `is_active` tinyint(1) DEFAULT 1,
     `statement_type` enum('BALANCE_SHEET','PROFIT_LOSS','BOTH') DEFAULT 'BALANCE_SHEET',
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `inventory_module` enum('STOCK_PURCHASE','PURCHASE_RETURN','SALES_INVOICE','SALES_RETURN','NONE') DEFAULT 'NONE',
+    `inventory_module` enum('STOCK_PURCHASE','PURCHASE_RETURN','SALES_INVOICE','SALES_RETURN','RECEIVABLES','PAYABLES','NONE') DEFAULT 'NONE',
     `created_by` int(11) DEFAULT NULL,
     PRIMARY KEY (`id`),
     INDEX `fk_parent_account` (`parent_id`),

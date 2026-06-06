@@ -155,6 +155,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                 ...r, 
                 reqTransNo: r.stock_req, // Map source Transaction ID for grouping
                 stock_received: r.stock_received || 0,
+                // STOCK_TRANSFER_RETURN: DB stores return qty in qty_return; map it to qty for the form Qty field
+                qty: (type === 'STOCK_TRANSFER_RETURN') ? (r.qty_return || r.qty || 0) : (r.qty || 0),
                 mfg_date: r.mfg_date ? r.mfg_date.substring(0, 10) : '', 
                 exp_date: r.exp_date ? r.exp_date.substring(0, 10) : '' 
             })).sort((a, b) => (b.reqTransNo || '').localeCompare(a.reqTransNo || ''));

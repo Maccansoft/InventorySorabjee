@@ -223,4 +223,180 @@ router.get('/summary', async (req, res) => {
     }
 });
 
+// Helper to find a parent account by module mapping or fallback keywords
+async function findParentAccount(moduleValue, fallbackKeyword) {
+    // 1. Try by inventory_module mapping
+    let [rows] = await db.query(
+        'SELECT id, account_code, account_name FROM chart_of_accounts WHERE inventory_module = ?',
+        [moduleValue]
+    );
+    if (rows.length > 0) return rows[0];
+
+    // 2. Fallback matching
+    [rows] = await db.query('SELECT id, account_code, account_name FROM chart_of_accounts');
+    const match = rows.find(a => {
+        const name = (a.account_name || '').toLowerCase();
+        return name.includes(fallbackKeyword.toLowerCase()) || 
+               (fallbackKeyword === 'receivable' && name === 'debtors') ||
+               (fallbackKeyword === 'payable' && name === 'creditors');
+    });
+    return match || null;
+}
+
+// Helper to get all child leaf accounts recursively
+async function getLeafAccountsUnderParent(parentId) {
+    if (!parentId) return [];
+    
+    const [accounts] = await db.query('SELECT id, parent_id, is_main, account_code, account_name FROM chart_of_accounts');
+    
+    const parentIdSet = new Set();
+    accounts.forEach(a => {
+        if (a.is_main == 1 || a.is_main === true) {
+            parentIdSet.add(a.id);
+        }
+        if (a.parent_id) {
+            parentIdSet.add(a.parent_id);
+        }
+    });
+
+    const getDescendants = (pid) => {
+        let result = [];
+        const directChildren = accounts.filter(a => a.parent_id === pid);
+        directChildren.forEach(c => {
+            result.push(c);
+            result.push(...getDescendants(c.id));
+        });
+        return result;
+    };
+
+    const descendants = getDescendants(parentId);
+    return descendants.filter(a => !parentIdSet.has(a.id));
+}
+
+// Receivables Report API
+router.get('/receivables', async (req, res) => {
+    const { fromDate, toDate, location_id, fiscal_year_id, all_locations } = req.query;
+
+    try {
+        const parentAcc = await findParentAccount('RECEIVABLES', 'receivable');
+        if (!parentAcc) {
+            return res.status(404).json({
+                error: 'parent_not_found',
+                message: 'No parent account with "Receivables" mapping or matching name found in the Chart of Accounts.'
+            });
+        }
+
+        const childAccounts = await getLeafAccountsUnderParent(parentAcc.id);
+        if (childAccounts.length === 0) {
+            return res.json([]);
+        }
+
+        const childIds = childAccounts.map(c => c.id);
+        let locFilter = '';
+        let fyFilter = '';
+        const queryParams = [];
+
+        const openDateParam = fromDate || '1970-01-01';
+        const fromDateParam = fromDate || '1970-01-01';
+        const toDateParam = toDate || '9999-12-31';
+
+        queryParams.push(openDateParam, fromDateParam, toDateParam, toDateParam);
+
+        if (location_id && all_locations !== 'true') {
+            locFilter = ' AND v.location_id = ?';
+            queryParams.push(location_id);
+        }
+        if (fiscal_year_id) {
+            fyFilter = ' AND v.fiscal_year_id = ?';
+            queryParams.push(fiscal_year_id);
+        }
+        queryParams.push(childIds);
+
+        const sql = `
+            SELECT 
+                coa.id,
+                coa.account_code,
+                coa.account_name,
+                COALESCE(SUM(CASE WHEN v.date < ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS opening_balance,
+                COALESCE(SUM(CASE WHEN v.date BETWEEN ? AND ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS period_balance,
+                COALESCE(SUM(CASE WHEN v.date <= ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS net_balance
+            FROM chart_of_accounts coa
+            LEFT JOIN voucher_entries ve ON coa.id = ve.account_id
+            LEFT JOIN vouchers v ON ve.voucher_id = v.id ${locFilter} ${fyFilter}
+            WHERE coa.id IN (?)
+            GROUP BY coa.id, coa.account_code, coa.account_name
+            ORDER BY coa.account_code
+        `;
+
+        const [rows] = await db.query(sql, queryParams);
+        res.json(rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Payables Report API
+router.get('/payables', async (req, res) => {
+    const { fromDate, toDate, location_id, fiscal_year_id, all_locations } = req.query;
+
+    try {
+        const parentAcc = await findParentAccount('PAYABLES', 'payable');
+        if (!parentAcc) {
+            return res.status(404).json({
+                error: 'parent_not_found',
+                message: 'No parent account with "Payables" mapping or matching name found in the Chart of Accounts.'
+            });
+        }
+
+        const childAccounts = await getLeafAccountsUnderParent(parentAcc.id);
+        if (childAccounts.length === 0) {
+            return res.json([]);
+        }
+
+        const childIds = childAccounts.map(c => c.id);
+        let locFilter = '';
+        let fyFilter = '';
+        const queryParams = [];
+
+        const openDateParam = fromDate || '1970-01-01';
+        const fromDateParam = fromDate || '1970-01-01';
+        const toDateParam = toDate || '9999-12-31';
+
+        queryParams.push(openDateParam, fromDateParam, toDateParam, toDateParam);
+
+        if (location_id && all_locations !== 'true') {
+            locFilter = ' AND v.location_id = ?';
+            queryParams.push(location_id);
+        }
+        if (fiscal_year_id) {
+            fyFilter = ' AND v.fiscal_year_id = ?';
+            queryParams.push(fiscal_year_id);
+        }
+        queryParams.push(childIds);
+
+        const sql = `
+            SELECT 
+                coa.id,
+                coa.account_code,
+                coa.account_name,
+                COALESCE(SUM(CASE WHEN v.date < ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS opening_balance,
+                COALESCE(SUM(CASE WHEN v.date BETWEEN ? AND ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS period_balance,
+                COALESCE(SUM(CASE WHEN v.date <= ? THEN ve.dr_amount - ve.cr_amount ELSE 0 END), 0) AS net_balance
+            FROM chart_of_accounts coa
+            LEFT JOIN voucher_entries ve ON coa.id = ve.account_id
+            LEFT JOIN vouchers v ON ve.voucher_id = v.id ${locFilter} ${fyFilter}
+            WHERE coa.id IN (?)
+            GROUP BY coa.id, coa.account_code, coa.account_name
+            ORDER BY coa.account_code
+        `;
+
+        const [rows] = await db.query(sql, queryParams);
+        res.json(rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -7,11 +7,13 @@ import {
   ArrowDownCircle, ArrowUpCircle, BookMarked,
   Users, Calendar, MapPin, LogOut, Settings, ChevronDown,
   Building2, ShieldCheck, Shield, Filter, Eye, ShoppingCart,
-  Repeat, Truck, RefreshCw, Printer, Barcode, Bell, Upload
+  Repeat, Truck, RefreshCw, Printer, Barcode, Bell, Upload, Layers
 } from 'lucide-react';
 import VoucherForm from './components/VoucherForm';
 import VoucherList from './components/VoucherList';
 import LedgerView from './components/LedgerView';
+import MultipleLedgersView from './components/MultipleLedgersView';
+import ReceivablesPayablesReport from './components/ReceivablesPayablesReport';
 import AccountModal from './components/AccountModal';
 import AccountListTable from './components/AccountListTable';
 import ImportModal from './components/common/ImportModal';
@@ -217,6 +219,9 @@ const App = () => {
       label: 'Accounts Reports',
       items: [
         { icon: <TrendingUp size={18} />, label: 'Ledgers' },
+        { icon: <Layers size={18} />, label: 'Multiple Ledgers' },
+        { icon: <TrendingUp size={18} />, label: 'Receivables' },
+        { icon: <TrendingDown size={18} />, label: 'Payables' },
         { icon: <BarChart3 size={18} />, label: 'Trial Balance' },
         { icon: <Activity size={18} />, label: 'Profit & Loss' },
         { icon: <Scale size={18} />, label: 'Balance Sheet' },
@@ -549,6 +554,9 @@ const App = () => {
                 {activeTab === 'Payments' && <ArrowUpCircle size={24} />}
                 {activeTab === 'Journal Vouchers' && <BookMarked size={24} />}
                 {activeTab === 'Ledgers' && <TrendingUp size={24} />}
+                {activeTab === 'Multiple Ledgers' && <Layers size={24} />}
+                {activeTab === 'Receivables' && <TrendingUp size={24} />}
+                {activeTab === 'Payables' && <TrendingDown size={24} />}
                 {activeTab === 'Trial Balance' && <BarChart3 size={24} />}
                 {activeTab === 'Profit & Loss' && <Activity size={24} />}
                 {activeTab === 'Balance Sheet' && <Scale size={24} />}
@@ -576,13 +584,15 @@ const App = () => {
                       activeTab === 'Receipts' ? 'All Money Received — Cash, Cheque, Online' :
                         activeTab === 'Payments' ? 'All Money Paid Out — Cash, Cheque, Online' :
                           activeTab === 'Journal Vouchers' ? 'General Journal Entries' :
-                            activeTab === 'Profit & Loss' ? 'Revenue vs Expense Analysis' :
-                              activeTab === 'Balance Sheet' ? 'Assets = Liabilities + Capital' :
-                                activeTab === 'User Management' ? 'Manage Users & Permissions' :
-                                  activeTab === 'Fiscal Years' ? 'Fiscal Year Control & Year-End Closing' :
-                                    activeTab === 'Locations' ? 'Branch & Office Locations' :
-                                      activeTab === 'Transfer Request' ? 'Request stock transfers between locations' :
-                                        'Financial Reports'}
+                            activeTab === 'Receivables' ? 'Net customer receivables and debtor balances' :
+                              activeTab === 'Payables' ? 'Net supplier payables and creditor balances' :
+                                activeTab === 'Profit & Loss' ? 'Revenue vs Expense Analysis' :
+                                  activeTab === 'Balance Sheet' ? 'Assets = Liabilities + Capital' :
+                                    activeTab === 'User Management' ? 'Manage Users & Permissions' :
+                                      activeTab === 'Fiscal Years' ? 'Fiscal Year Control & Year-End Closing' :
+                                        activeTab === 'Locations' ? 'Branch & Office Locations' :
+                                          activeTab === 'Transfer Request' ? 'Request stock transfers between locations' :
+                                            'Financial Reports'}
                 </p>
               </div>
             </div>
@@ -619,7 +629,7 @@ const App = () => {
               </div>
             )}
 
-            {['Receipts', 'Payments', 'Journal Vouchers', 'Ledgers', 'Trial Balance', 'Profit & Loss', 'Balance Sheet', 'Stock Purchase', 'Purchase Return', 'Transfer Request', 'Stock Transfer', 'Stock Return', 'Sales Invoice', 'Sales Return'].includes(activeTab) && (
+            {['Receipts', 'Payments', 'Journal Vouchers', 'Ledgers', 'Multiple Ledgers', 'Receivables', 'Payables', 'Trial Balance', 'Profit & Loss', 'Balance Sheet', 'Stock Purchase', 'Purchase Return', 'Transfer Request', 'Stock Transfer', 'Stock Return', 'Sales Invoice', 'Sales Return'].includes(activeTab) && (
               <div className="report-date-filter animate-fade-in">
                 <div className="filter-group">
                   <label>From Date</label>
@@ -702,6 +712,45 @@ const App = () => {
           {activeTab === 'Ledgers' && (
             <LedgerView
               accounts={accounts}
+              fromDate={fromDate}
+              toDate={toDate}
+              locationId={effectiveLocationId}
+              fiscalYearId={currentUser.fiscal_year_id}
+              companyInfo={companyInfo}
+              reportMeta={getReportMeta()}
+            />
+          )}
+
+          {/* ── Multiple Ledgers ── */}
+          {activeTab === 'Multiple Ledgers' && (
+            <MultipleLedgersView
+              accounts={accounts}
+              fromDate={fromDate}
+              toDate={toDate}
+              locationId={effectiveLocationId}
+              fiscalYearId={currentUser.fiscal_year_id}
+              companyInfo={companyInfo}
+              reportMeta={getReportMeta()}
+            />
+          )}
+
+          {/* ── Receivables ── */}
+          {activeTab === 'Receivables' && (
+            <ReceivablesPayablesReport
+              type="RECEIVABLES"
+              fromDate={fromDate}
+              toDate={toDate}
+              locationId={effectiveLocationId}
+              fiscalYearId={currentUser.fiscal_year_id}
+              companyInfo={companyInfo}
+              reportMeta={getReportMeta()}
+            />
+          )}
+
+          {/* ── Payables ── */}
+          {activeTab === 'Payables' && (
+            <ReceivablesPayablesReport
+              type="PAYABLES"
               fromDate={fromDate}
               toDate={toDate}
               locationId={effectiveLocationId}

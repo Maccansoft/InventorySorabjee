@@ -166,7 +166,7 @@ async function initDB() {
         is_main       BOOLEAN      DEFAULT FALSE,
         is_active     BOOLEAN      DEFAULT TRUE,
         statement_type ENUM('BALANCE_SHEET', 'PROFIT_LOSS', 'BOTH') DEFAULT 'BALANCE_SHEET',
-        inventory_module ENUM('STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'NONE') DEFAULT 'NONE',
+        inventory_module ENUM('STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'RECEIVABLES', 'PAYABLES', 'NONE') DEFAULT 'NONE',
         location_id   INT          NULL,
         created_by    INT          NULL,
         created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
@@ -178,7 +178,8 @@ async function initDB() {
       )
     `);
     await safeQuery(conn, 'coa.statement_type', "ALTER TABLE chart_of_accounts MODIFY COLUMN statement_type ENUM('BALANCE_SHEET', 'PROFIT_LOSS', 'BOTH') DEFAULT 'BALANCE_SHEET'");
-    await safeQuery(conn, 'coa.inventory_module', "ALTER TABLE chart_of_accounts ADD COLUMN inventory_module ENUM('STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'NONE') DEFAULT 'NONE'");
+    await safeQuery(conn, 'coa.inventory_module', "ALTER TABLE chart_of_accounts ADD COLUMN inventory_module ENUM('STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'RECEIVABLES', 'PAYABLES', 'NONE') DEFAULT 'NONE'");
+    await safeQuery(conn, 'coa.inventory_module_modify', "ALTER TABLE chart_of_accounts MODIFY COLUMN inventory_module ENUM('STOCK_PURCHASE', 'PURCHASE_RETURN', 'SALES_INVOICE', 'SALES_RETURN', 'RECEIVABLES', 'PAYABLES', 'NONE') DEFAULT 'NONE'");
     await safeQuery(conn, 'coa.location_id', 'ALTER TABLE chart_of_accounts ADD COLUMN location_id INT NULL');
     await safeQuery(conn, 'coa.created_by', 'ALTER TABLE chart_of_accounts ADD COLUMN created_by INT NULL');
 

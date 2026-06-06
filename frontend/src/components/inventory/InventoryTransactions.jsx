@@ -444,7 +444,8 @@ const InventoryTransactions = ({
                                                 <th>Category</th>
                                                 <th>Power</th>
                                                 {activeFilter === 'TRANSFER_REQUEST' && <th className="text-center">Stock Received</th>}
-                                                {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && activeFilter !== 'SALES_RETURN' && <th className="text-center">Stock In Hand</th>}
+                                                {isStockTransferReturn && <th className="text-center">Stock Received</th>}
+                                                {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && activeFilter !== 'SALES_RETURN' && !isStockTransferReturn && <th className="text-center">Stock In Hand</th>}
                                                 <th>Lot No</th>
                                                 <th style={{ width: 80 }}>SNO</th>
                                                 <th>Exp Date</th>
@@ -630,7 +631,10 @@ const InventoryTransactions = ({
                                                     {activeFilter === 'TRANSFER_REQUEST' && (
                                                         <td className="text-center font-bold" style={{ fontSize: '0.85rem', color: '#0369a1' }}>{formatQty(t.stock_received || 0)}</td>
                                                     )}
-                                                    {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && activeFilter !== 'SALES_RETURN' && (
+                                                    {isStockTransferReturn && (
+                                                        <td className="text-center font-bold text-slate-500" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty_received || 0)}</td>
+                                                    )}
+                                                    {activeFilter !== 'STOCK_OPENING' && activeFilter !== 'TRANSFER_REQUEST' && activeFilter !== 'SALES_RETURN' && !isStockTransferReturn && (
                                                         <td className="text-center font-bold text-slate-500" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty_in_hand || 0)}</td>
                                                     )}
                                                     <td>{t.lot_no ? <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 700, color: '#475569', fontSize: '0.75rem' }}>{t.lot_no}</code> : '-'}</td>

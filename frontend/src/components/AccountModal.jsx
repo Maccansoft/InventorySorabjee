@@ -194,6 +194,8 @@ const AccountModal = ({ currentUser, account, accounts, onClose, onSave }) => {
                             <option value="PURCHASE_RETURN">Purchase Return</option>
                             <option value="SALES_INVOICE">Sales Invoice</option>
                             <option value="SALES_RETURN">Sales Return</option>
+                            <option value="RECEIVABLES">Receivables</option>
+                            <option value="PAYABLES">Payables</option>
                         </select>
                     </div>
 
