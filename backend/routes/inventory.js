@@ -191,6 +191,69 @@ router.get('/lookup-lot/:lot_no', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get('/lookup-lot-for-sale/:lot_no', async (req, res) => {
+    try {
+        const { lot_no } = req.params;
+        const { sno } = req.query;
+        
+        const hasSno = sno && sno !== '0' && sno !== '';
+        const queryParams = [];
+        const sqlParts = [];
+
+        // 1. Stock Opening
+        sqlParts.push(`
+            SELECT maker_id, category_id, power_id, qty, rate, '' as p_rate, exp_date, mfg_date, '1900-01-01' as trans_date, id, 1 as priority
+            FROM stock_opening_balances 
+            WHERE lot_no = ? ${hasSno ? 'AND sno = ?' : ''}
+        `);
+        queryParams.push(lot_no);
+        if (hasSno) queryParams.push(sno);
+
+        // 2. Stock Purchase
+        sqlParts.push(`
+            SELECT d.maker_id, d.category_id, d.power_id, d.qty, d.rate, d.p_rate, d.exp_date, d.mfg_date, h.trans_date, h.id, 2 as priority
+            FROM purchase_details d 
+            JOIN purchases h ON d.purchase_id = h.id 
+            WHERE d.lot_no = ? ${hasSno ? 'AND d.sno = ?' : ''}
+        `);
+        queryParams.push(lot_no);
+        if (hasSno) queryParams.push(sno);
+
+        // 3. Transfer Request
+        sqlParts.push(`
+            SELECT d.maker_id, d.category_id, d.power_id, d.qty, 0.00 as rate, '' as p_rate, d.exp_date, d.mfg_date, h.trans_date, h.id, 3 as priority
+            FROM transfer_request_details d 
+            JOIN transfer_requests h ON d.request_id = h.id 
+            WHERE d.lot_no = ? ${hasSno ? 'AND d.sno = ?' : ''}
+        `);
+        queryParams.push(lot_no);
+        if (hasSno) queryParams.push(sno);
+
+        // 4. Stock Transfer
+        sqlParts.push(`
+            SELECT d.maker_id, d.category_id, d.power_id, d.qty, d.rate, '' as p_rate, d.exp_date, d.mfg_date, h.trans_date, h.id, 4 as priority
+            FROM transfer_details d 
+            JOIN transfers h ON d.transfer_id = h.id 
+            WHERE d.lot_no = ? ${hasSno ? 'AND d.sno = ?' : ''}
+        `);
+        queryParams.push(lot_no);
+        if (hasSno) queryParams.push(sno);
+
+        const sql = `
+            SELECT maker_id, category_id, power_id, qty, rate, p_rate, exp_date, mfg_date FROM (
+                ${sqlParts.join('\nUNION ALL\n')}
+            ) as t
+            ORDER BY priority ASC, trans_date DESC, id DESC 
+            LIMIT 1
+        `;
+
+        const [rows] = await db.query(sql, queryParams);
+        
+        if (rows.length > 0) res.json(rows[0]);
+        else res.status(404).json({ error: 'Lot not found' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/barcode-setup', async (req, res) => {
     try {
         const { format_type, maker_id, sample_barcode, lot_no, sno, exp_date, mfg_years_less, is_active } = req.body;

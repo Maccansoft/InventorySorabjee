@@ -737,14 +737,32 @@ const InventoryTransactions = ({
                 />
             )}
 
-            {bulkPrintSelection && (
-                <BulkSalesInvoicePrint
-                    selection={bulkPrintSelection}
-                    companyInfo={companyInfo}
-                    currentUser={currentUser}
-                    onClose={() => setBulkPrintSelection(null)}
-                />
-            )}
+            {bulkPrintSelection && (() => {
+                const deduceLocationId = () => {
+                    if (isSuperAdmin && filterLocationId) return filterLocationId;
+                    const sample = bulkPrintSelection.mode === 'RANGE' 
+                        ? bulkPrintSelection.fromNo 
+                        : (bulkPrintSelection.specificNos || '').split(',')[0];
+                    if (sample) {
+                        const parts = sample.split('/');
+                        if (parts.length > 1) {
+                            const locCode = parts[1].trim().toUpperCase();
+                            const matched = (locations || []).find(l => l.code?.toUpperCase() === locCode);
+                            if (matched) return matched.id;
+                        }
+                    }
+                    return currentUser.location_id;
+                };
+                return (
+                    <BulkSalesInvoicePrint
+                        selection={bulkPrintSelection}
+                        companyInfo={companyInfo}
+                        currentUser={currentUser}
+                        locationId={deduceLocationId()}
+                        onClose={() => setBulkPrintSelection(null)}
+                    />
+                );
+            })()}
 
             <ExportModal
                 isOpen={exportModal}

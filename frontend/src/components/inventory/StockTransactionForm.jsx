@@ -715,7 +715,8 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         if (!enrichmentTypes.includes(type) || !lotNo) return;
         try {
             const currentSno = passedSno !== null ? passedSno : (details[idx]?.sno || '');
-            const { data } = await axios.get(`${API}/lookup-lot/${lotNo}`, {
+            const endpoint = type === 'SALES_INVOICE' ? 'lookup-lot-for-sale' : 'lookup-lot';
+            const { data } = await axios.get(`${API}/${endpoint}/${lotNo}`, {
                 params: { sno: currentSno, type }
             });
 

@@ -4,7 +4,7 @@ import { X, Printer, Download } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import { formatAmount, formatQty } from '../../utils/numberUtils';
 
-const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser }) => {
+const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser, locationId }) => {
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const isDC = selection.printType === 'DC';
@@ -13,7 +13,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
         const fetchInvoices = async () => {
             try {
                 let params = {
-                    location_id: currentUser.location_id,
+                    location_id: locationId || currentUser.location_id,
                     fiscal_year_id: currentUser.fiscal_year_id
                 };
                 if (selection.mode === 'RANGE') {
@@ -226,14 +226,14 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                     <thead>
                                         <tr>
                                             <th width="35" className="th-salmon">S.NO</th>
-                                            <th width="220" className="th-gray">DESCRIPTION</th>
+                                            <th width={isDC ? "350" : "220"} className="th-gray">DESCRIPTION</th>
                                             <th width="40" className="th-gray">QTY</th>
                                             <th width="80" className="th-gray">LOT NO</th>
                                             <th width="80" className="th-gray">MFG DATE</th>
                                             <th width="80" className="th-gray">EXP DATE</th>
-                                            <th width="60" className="th-gray text-center">UNIT PRICE</th>
-                                            <th width="40" className="th-gray text-center">QTY</th>
-                                            <th width="70" className="th-red text-center">TOTAL</th>
+                                            {!isDC && <th width="60" className="th-gray text-center">UNIT PRICE</th>}
+                                            <th width={isDC ? "60" : "40"} className="th-gray text-center">{isDC ? 'TOTAL QTY' : 'QTY'}</th>
+                                            {!isDC && <th width="70" className="th-red text-center">TOTAL</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -261,7 +261,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                                         <td className="text-center td-light-gray border-white">{lot.lot_no}</td>
                                                         <td className="text-center td-light-gray border-white">{new Date(lot.mfg_date).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
                                                         <td className="text-center td-light-gray border-white">{new Date(lot.exp_date).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
-                                                        {li === 0 && (
+                                                        {!isDC && li === 0 && (
                                                             <td rowSpan={item.lots.length} className="text-center td-light-gray border-white border-b font-bold">
                                                                 {formatAmount(item.unit_price)}
                                                             </td>
@@ -271,7 +271,7 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                                                 {formatQty(item.group_total_qty)}
                                                             </td>
                                                         )}
-                                                        {li === 0 && (
+                                                        {!isDC && li === 0 && (
                                                             <td rowSpan={item.lots.length} className="text-center td-salmon text-white font-bold border-b border-white">
                                                                 {formatAmount(item.group_total_amount)}
                                                             </td>
@@ -289,14 +289,18 @@ const BulkSalesInvoicePrint = ({ selection, onClose, companyInfo, currentUser })
                                         <span className="total-label">Total Qty:</span>
                                         <span className="total-value">{formatQty(inv.details.reduce((s, d) => s + parseFloat(d.qty), 0))}</span>
                                     </div>
-                                    <div className="totals-row">
-                                        <span className="total-label">Gross Total:</span>
-                                        <span className="total-value">{formatAmount(invoiceGrossTotal)}</span>
-                                    </div>
-                                    <div className="totals-row grand-total-row">
-                                        <span className="total-label-grand">GRAND TOTAL</span>
-                                        <span className="total-value-grand">{formatAmount(invoiceGrossTotal)}</span>
-                                    </div>
+                                    {!isDC && (
+                                        <>
+                                            <div className="totals-row">
+                                                <span className="total-label">Gross Total:</span>
+                                                <span className="total-value">{formatAmount(invoiceGrossTotal)}</span>
+                                            </div>
+                                            <div className="totals-row grand-total-row">
+                                                <span className="total-label-grand">GRAND TOTAL</span>
+                                                <span className="total-value-grand">{formatAmount(invoiceGrossTotal)}</span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Footer Wrapper - Pushed to bottom */}
