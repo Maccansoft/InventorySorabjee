@@ -416,47 +416,67 @@ const InventoryTransactions = ({
                 </div>
                 
                 {(activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN') && (
-                    <div className="advanced-filters-panel" style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <div className="advanced-filters-panel" style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                             <Filter size={16} className="text-slate-500" />
-                            <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#334155', fontWeight: 600 }}>Advanced Filters</h4>
+                            <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Advanced Filters</h4>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>From Date</label>
-                                <input type="date" className="premium-input" value={advFromDate} onChange={e => setAdvFromDate(e.target.value)} />
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                            <div className="filter-group">
+                                <label>From Date</label>
+                                <input type="date" value={advFromDate} onChange={e => setAdvFromDate(e.target.value)} style={{ padding: '8px 12px', height: '38px', boxSizing: 'border-box' }} />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>To Date</label>
-                                <input type="date" className="premium-input" value={advToDate} onChange={e => setAdvToDate(e.target.value)} />
+                            <div className="filter-group">
+                                <label>To Date</label>
+                                <input type="date" value={advToDate} onChange={e => setAdvToDate(e.target.value)} style={{ padding: '8px 12px', height: '38px', boxSizing: 'border-box' }} />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Customer</label>
-                                <select className="premium-select" value={advCustomer} onChange={e => setAdvCustomer(e.target.value)}>
-                                    <option value="ALL">All Customers</option>
-                                    {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                            <div className="filter-group">
+                                <label>Customer</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Customers' },
+                                        ...uniqueCustomers.map(c => ({ value: c, label: c }))
+                                    ]}
+                                    value={advCustomer}
+                                    onChange={val => setAdvCustomer(val)}
+                                    placeholder="All Customers"
+                                />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Maker</label>
-                                <select className="premium-select" value={advMaker} onChange={e => setAdvMaker(e.target.value)}>
-                                    <option value="ALL">All Makers</option>
-                                    {uniqueMakers.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
+                            <div className="filter-group">
+                                <label>Maker</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Makers' },
+                                        ...uniqueMakers.map(m => ({ value: m, label: m }))
+                                    ]}
+                                    value={advMaker}
+                                    onChange={val => setAdvMaker(val)}
+                                    placeholder="All Makers"
+                                />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Category</label>
-                                <select className="premium-select" value={advCategory} onChange={e => setAdvCategory(e.target.value)}>
-                                    <option value="ALL">All Categories</option>
-                                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                            <div className="filter-group">
+                                <label>Category</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Categories' },
+                                        ...uniqueCategories.map(c => ({ value: c, label: c }))
+                                    ]}
+                                    value={advCategory}
+                                    onChange={val => setAdvCategory(val)}
+                                    placeholder="All Categories"
+                                />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Item (Power / Lot)</label>
-                                <select className="premium-select" value={advItem} onChange={e => setAdvItem(e.target.value)}>
-                                    <option value="ALL">All Items</option>
-                                    {uniqueItems.map(i => <option key={i} value={i}>{i}</option>)}
-                                </select>
+                            <div className="filter-group">
+                                <label>Item (Power / Lot)</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Items' },
+                                        ...uniqueItems.map(i => ({ value: i, label: i }))
+                                    ]}
+                                    value={advItem}
+                                    onChange={val => setAdvItem(val)}
+                                    placeholder="All Items"
+                                />
                             </div>
                         </div>
                     </div>
