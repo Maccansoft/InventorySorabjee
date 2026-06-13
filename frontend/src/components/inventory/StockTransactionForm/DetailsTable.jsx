@@ -232,7 +232,13 @@ const DetailsTable = ({
                                                     type="text"
                                                     value={formatAmount(d.amount)}
                                                     onChange={e => updateRow(i, 'amount', e.target.value.replace(/,/g, ''))}
-                                                    style={{ ...inputStyle, textAlign: 'right', fontWeight: 800 }}
+                                                    readOnly={type === 'SALES_INVOICE' || type === 'SALES_RETURN'}
+                                                    style={{ 
+                                                        ...inputStyle, 
+                                                        textAlign: 'right', 
+                                                        fontWeight: 800,
+                                                        ...((type === 'SALES_INVOICE' || type === 'SALES_RETURN') ? { background: '#f8fafc', color: '#475569' } : {})
+                                                    }}
                                                 />
                                             </td>
                                         </>

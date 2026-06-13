@@ -1106,7 +1106,9 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
                     {/* Footer / Summary */}
                     <div style={{ padding: '24px 40px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', gap: 40 }}>
-                            <div className="stat-pill">Total Items: <strong>{formatQty(header.total_qty)}</strong></div>
+                            <div className="stat-pill">
+                                {type === 'TRANSFER_REQUEST' ? 'Total Qty Requested:' : ['SALES_INVOICE', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN'].includes(type) ? 'Total Qty:' : 'Total Items:'} <strong>{formatQty(['SALES_INVOICE', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN', 'TRANSFER_REQUEST'].includes(type) ? details.reduce((sum, d) => sum + parseFloat(d.qty || 0), 0) : header.total_qty)}</strong>
+                            </div>
                             {!isRequestType && (
                                 <div className="stat-pill">Grand Total: <strong>PKR {formatAmount(header.total_amount || 0)}</strong></div>
                             )}

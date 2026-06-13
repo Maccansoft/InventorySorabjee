@@ -56,6 +56,14 @@ const InventoryTransactions = ({
     const [bulkPrintModal, setBulkPrintModal] = useState(false);
     const [bulkPrintType, setBulkPrintType] = useState('INVOICE');
     const [bulkPrintSelection, setBulkPrintSelection] = useState(null);
+
+    // Advanced Filters for Sales Invoice
+    const [advFromDate, setAdvFromDate] = useState('');
+    const [advToDate, setAdvToDate] = useState('');
+    const [advCustomer, setAdvCustomer] = useState('ALL');
+    const [advMaker, setAdvMaker] = useState('ALL');
+    const [advCategory, setAdvCategory] = useState('ALL');
+    const [advItem, setAdvItem] = useState('ALL');
     
     const isTransfer = activeFilter === 'TRANSFER';
     const isTrq = activeFilter === 'TRANSFER_REQUEST';
@@ -115,6 +123,15 @@ const InventoryTransactions = ({
 
     useEffect(() => { setActiveFilter(initialType); }, [initialType]);
     useEffect(() => { fetchTransactions(); }, [filterLocationId, activeFilter, fromDate, toDate]);
+    
+    useEffect(() => {
+        setAdvFromDate('');
+        setAdvToDate('');
+        setAdvCustomer('ALL');
+        setAdvMaker('ALL');
+        setAdvCategory('ALL');
+        setAdvItem('ALL');
+    }, [activeFilter]);
 
     useEffect(() => {
         if (preloadData && preloadData._timestamp) {
@@ -124,7 +141,7 @@ const InventoryTransactions = ({
 
     const filtered = transactions.filter(t => {
         const q = search.toLowerCase();
-        return (
+        let matchesSearch = (
             (t.trans_no || '').toLowerCase().includes(q) ||
             (t.supplier_name || '').toLowerCase().includes(q) ||
             (t.customer_name || '').toLowerCase().includes(q) ||
@@ -132,7 +149,25 @@ const InventoryTransactions = ({
             (t.maker_name || '').toLowerCase().includes(q) ||
             (t.category_name || '').toLowerCase().includes(q)
         );
+
+        if (activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN') {
+            if (advFromDate && new Date(t.trans_date) < new Date(advFromDate)) return false;
+            if (advToDate && new Date(t.trans_date) > new Date(advToDate)) return false;
+            if (advCustomer !== 'ALL' && t.customer_name !== advCustomer) return false;
+            if (advMaker !== 'ALL' && t.maker_name !== advMaker) return false;
+            if (advCategory !== 'ALL' && t.category_name !== advCategory) return false;
+            if (advItem !== 'ALL' && t.power !== advItem && t.lot_no !== advItem) return false;
+        }
+
+        return matchesSearch;
     });
+
+    const isAdvFilterActive = activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN';
+    const uniqueCustomers = isAdvFilterActive ? [...new Set(transactions.map(t => t.customer_name).filter(Boolean))].sort() : [];
+    const uniqueMakers = isAdvFilterActive ? [...new Set(transactions.map(t => t.maker_name).filter(Boolean))].sort() : [];
+    const uniqueCategories = isAdvFilterActive ? [...new Set(transactions.map(t => t.category_name).filter(Boolean))].sort() : [];
+    const uniqueItems = isAdvFilterActive ? [...new Set(transactions.map(t => t.power || t.lot_no).filter(Boolean))].sort() : [];
+
 
     const deleteTransaction = async (type, id) => {
         if (!window.confirm('Are you sure you want to delete this transaction and all its item records?')) return;
@@ -379,12 +414,59 @@ const InventoryTransactions = ({
                         )}
                     </div>
                 </div>
+                
+                {(activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN') && (
+                    <div className="advanced-filters-panel" style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                            <Filter size={16} className="text-slate-500" />
+                            <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#334155', fontWeight: 600 }}>Advanced Filters</h4>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>From Date</label>
+                                <input type="date" className="premium-input" value={advFromDate} onChange={e => setAdvFromDate(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>To Date</label>
+                                <input type="date" className="premium-input" value={advToDate} onChange={e => setAdvToDate(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Customer</label>
+                                <select className="premium-select" value={advCustomer} onChange={e => setAdvCustomer(e.target.value)}>
+                                    <option value="ALL">All Customers</option>
+                                    {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Maker</label>
+                                <select className="premium-select" value={advMaker} onChange={e => setAdvMaker(e.target.value)}>
+                                    <option value="ALL">All Makers</option>
+                                    {uniqueMakers.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Category</label>
+                                <select className="premium-select" value={advCategory} onChange={e => setAdvCategory(e.target.value)}>
+                                    <option value="ALL">All Categories</option>
+                                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Item (Power / Lot)</label>
+                                <select className="premium-select" value={advItem} onChange={e => setAdvItem(e.target.value)}>
+                                    <option value="ALL">All Items</option>
+                                    {uniqueItems.map(i => <option key={i} value={i}>{i}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="table-search-premium mt-4 mb-4">
                     <Search size={16} className="search-icon" />
                     <input
                         type="text"
-                        placeholder="Search by Trans #, Lot No, Item, Vendor, Supplier or Customer..."
+                        placeholder="Search by Trans #, Lot No, Vendor, Supplier or Customer..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
@@ -397,7 +479,7 @@ const InventoryTransactions = ({
                         let colCount = 10; // Base columns
                         if (isTrq) colCount = 12;
                         else if (isTransfer) colCount = 16;
-                        else if (isSalesReturn) colCount = 14; // No Stock In Hand column for Sales Return
+                        else if (isSalesReturn) colCount = 13; // Removed Qty Sold column
                         else colCount = 14;
 
                         const showCustomer = !isTrq && !isTransfer;
@@ -450,7 +532,6 @@ const InventoryTransactions = ({
                                                 <th style={{ width: 80 }}>SNO</th>
                                                 <th>Exp Date</th>
                                                 <th>Mfg Date</th>
-                                                {isSalesReturn && <th className="text-center">Qty Sold</th>}
                                                 <th className="text-center">{activeFilter === 'TRANSFER_REQUEST' ? 'Qty Request' : 'Qty'}</th>
                                                 {!isTrq && !isStockTransferReturn && <th className="text-right">Total</th>}
                                                 {(isTransfer || isTrq) && <th>Destination</th>}
@@ -641,7 +722,6 @@ const InventoryTransactions = ({
                                                     <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>{t.sno || '-'}</td>
                                                     <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.exp_date)}</span></td>
                                                     <td><span style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.78rem' }}>{formatDatePrint(t.mfg_date)}</span></td>
-                                                    {isSalesReturn && <td className="text-center font-bold text-slate-500" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty_sold || 0)}</td>}
                                                     <td className="text-center font-bold text-blue-600" style={{ fontSize: '0.85rem' }}>{formatQty(t.qty || 0)}</td>
                                                     {!isTrq && !isStockTransferReturn && <td className="text-right font-bold text-slate-800" style={{ fontSize: '0.85rem' }}>{formatAmount(t.amount || t.total_amount || 0)}</td>}
                                                     {(isTransfer || isTrq) && (
@@ -685,6 +765,20 @@ const InventoryTransactions = ({
                                         });
                                     })()}
                                 </tbody>
+                                {(activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN') && (
+                                    <tfoot style={{ position: 'sticky', bottom: 0, background: '#f8fafc', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)', zIndex: 10 }}>
+                                        <tr>
+                                            <td colSpan={activeFilter === 'SALES_INVOICE' ? 11 : 10} style={{ textAlign: 'right', fontWeight: 800, color: '#334155', padding: '12px 16px', fontSize: '0.9rem' }}>TOTALS</td>
+                                            <td className="text-center font-bold text-blue-700" style={{ fontSize: '0.95rem', background: '#eff6ff' }}>
+                                                {formatQty(filtered.reduce((sum, t) => sum + parseFloat(t.qty || 0), 0))}
+                                            </td>
+                                            <td className="text-right font-bold text-emerald-700" style={{ fontSize: '0.95rem', background: '#ecfdf5' }}>
+                                                {formatAmount(filtered.reduce((sum, t) => sum + parseFloat(t.amount || t.total_amount || 0), 0))}
+                                            </td>
+                                            <td colSpan={2}></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         );
                     })()}
