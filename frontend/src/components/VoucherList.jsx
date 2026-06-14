@@ -639,4 +639,4 @@ const VoucherList = ({
     );
 };
 
-export default VoucherList;
+export default React.memo(VoucherList);

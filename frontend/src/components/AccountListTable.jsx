@@ -197,4 +197,4 @@ const AccountListTable = ({ accounts, onEdit, onDelete, currentUser, searchQuery
     );
 };
 
-export default AccountListTable;
+export default React.memo(AccountListTable);

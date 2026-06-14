@@ -399,4 +399,169 @@ router.get('/payables', async (req, res) => {
     }
 });
 
+// Cash/Bank Book Report API
+router.get('/cash-bank-book', async (req, res) => {
+    const { fromDate, toDate, accountType, accountId, location_id, fiscal_year_id, all_locations } = req.query;
+    try {
+        // Step 1: Identify all Cash and Bank accounts
+        const [allAccounts] = await db.query('SELECT id, parent_id, is_main, account_code, account_name FROM chart_of_accounts WHERE is_active = TRUE');
+        
+        let targetParentIds = new Set();
+        allAccounts.forEach(a => {
+            const name = (a.account_name || '').toLowerCase();
+            if (accountType === 'CASH' && name.includes('cash')) targetParentIds.add(a.id);
+            else if (accountType === 'BANK' && name.includes('bank')) targetParentIds.add(a.id);
+            else if (!accountType || accountType === 'ALL') {
+                if (name.includes('cash') || name.includes('bank')) targetParentIds.add(a.id);
+            }
+        });
+
+        // Resolve children recursively
+        let childIds = new Set();
+        const getChildren = (pid) => {
+            allAccounts.filter(a => a.parent_id === pid).forEach(c => {
+                if (!c.is_main) childIds.add(c.id);
+                getChildren(c.id);
+            });
+        };
+        targetParentIds.forEach(pid => getChildren(pid));
+        
+        // Also if any matching account is itself a leaf, include it
+        targetParentIds.forEach(pid => {
+            const acc = allAccounts.find(a => a.id === pid);
+            if (acc && (!acc.is_main || !allAccounts.some(x => x.parent_id === pid))) {
+                childIds.add(pid);
+            }
+        });
+
+        if (accountId) {
+            childIds = new Set([parseInt(accountId)]);
+        }
+
+        const selectedIds = Array.from(childIds);
+        if (selectedIds.length === 0) {
+            return res.json({ accounts: [], grandTotals: { dr: 0, cr: 0, closing: 0 } });
+        }
+
+        // Filters
+        let locFilter = '';
+        let fyFilter = '';
+        const queryParamsOb = [];
+        const queryParamsTr = [];
+        
+        if (location_id && all_locations !== 'true') {
+            locFilter = ' AND v.location_id = ?';
+            queryParamsOb.push(location_id);
+            queryParamsTr.push(location_id);
+        }
+        if (fiscal_year_id) {
+            fyFilter = ' AND v.fiscal_year_id = ?';
+            queryParamsOb.push(fiscal_year_id);
+            queryParamsTr.push(fiscal_year_id);
+        }
+
+        const openDateParam = fromDate || '1970-01-01';
+
+        // For Opening Balance: date < fromDate
+        const obSql = `
+            SELECT ve.account_id, COALESCE(SUM(ve.dr_amount), 0) as dr, COALESCE(SUM(ve.cr_amount), 0) as cr
+            FROM voucher_entries ve
+            JOIN vouchers v ON ve.voucher_id = v.id
+            WHERE ve.account_id IN (?) AND v.date < ? ${locFilter} ${fyFilter}
+            GROUP BY ve.account_id
+        `;
+        const [obRows] = await db.query(obSql, [selectedIds, openDateParam, ...queryParamsOb]);
+        
+        const obMap = {};
+        obRows.forEach(row => {
+            obMap[row.account_id] = parseFloat(row.dr) - parseFloat(row.cr); // Cash/Bank are assets (DR nature)
+        });
+
+        // For Transactions: date BETWEEN fromDate AND toDate
+        const trSql = `
+            SELECT 
+                ve.account_id, 
+                coa.account_code, 
+                coa.account_name,
+                v.date, 
+                v.voucher_no, 
+                v.voucher_type, 
+                ve.description as particulars, 
+                ve.dr_amount, 
+                ve.cr_amount,
+                loc.name as location_name
+            FROM voucher_entries ve
+            JOIN vouchers v ON ve.voucher_id = v.id
+            JOIN chart_of_accounts coa ON ve.account_id = coa.id
+            LEFT JOIN locations loc ON v.location_id = loc.id
+            WHERE ve.account_id IN (?) AND v.date BETWEEN ? AND ? ${locFilter} ${fyFilter}
+            ORDER BY coa.account_code, v.date ASC, v.id ASC
+        `;
+        const [trRows] = await db.query(trSql, [selectedIds, openDateParam, toDate || '9999-12-31', ...queryParamsTr]);
+
+        // Group by account
+        const accountData = {};
+        selectedIds.forEach(id => {
+            const acc = allAccounts.find(a => a.id === id);
+            if(acc) {
+                accountData[id] = {
+                    id: acc.id,
+                    account_code: acc.account_code,
+                    account_name: acc.account_name,
+                    openingBalance: obMap[id] || 0,
+                    transactions: [],
+                    totalDr: 0,
+                    totalCr: 0,
+                    closingBalance: obMap[id] || 0
+                };
+            }
+        });
+
+        trRows.forEach(row => {
+            const acc = accountData[row.account_id];
+            if (acc) {
+                const dr = parseFloat(row.dr_amount || 0);
+                const cr = parseFloat(row.cr_amount || 0);
+                acc.totalDr += dr;
+                acc.totalCr += cr;
+                
+                acc.closingBalance += (dr - cr);
+                
+                acc.transactions.push({
+                    date: row.date,
+                    voucher_no: row.voucher_no,
+                    voucher_type: row.voucher_type,
+                    particulars: row.particulars,
+                    dr_amount: dr,
+                    cr_amount: cr,
+                    location_name: row.location_name || 'Global',
+                    running_balance: acc.closingBalance
+                });
+            }
+        });
+
+        // Exclude accounts with 0 opening balance and no transactions
+        const resultAccounts = Object.values(accountData).filter(a => Math.abs(a.openingBalance) > 0.001 || a.transactions.length > 0);
+        
+        let grandDr = 0, grandCr = 0, grandClosing = 0;
+        resultAccounts.forEach(a => {
+            grandDr += a.totalDr;
+            grandCr += a.totalCr;
+            grandClosing += a.closingBalance;
+        });
+
+        res.json({
+            accounts: resultAccounts,
+            grandTotals: {
+                dr: grandDr,
+                cr: grandCr,
+                closing: grandClosing
+            }
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -14,6 +14,7 @@ import VoucherList from './components/VoucherList';
 import LedgerView from './components/LedgerView';
 import MultipleLedgersView from './components/MultipleLedgersView';
 import ReceivablesPayablesReport from './components/ReceivablesPayablesReport';
+import CashBankBookReport from './components/CashBankBookReport';
 import AccountModal from './components/AccountModal';
 import AccountListTable from './components/AccountListTable';
 import ImportModal from './components/common/ImportModal';
@@ -218,6 +219,7 @@ const App = () => {
     {
       label: 'Accounts Reports',
       items: [
+        { icon: <Wallet size={18} />, label: 'Cash/Bank Book' },
         { icon: <TrendingUp size={18} />, label: 'Ledgers' },
         { icon: <Layers size={18} />, label: 'Multiple Ledgers' },
         { icon: <TrendingUp size={18} />, label: 'Receivables' },
@@ -718,6 +720,19 @@ const App = () => {
               fiscalYearId={currentUser.fiscal_year_id}
               companyInfo={companyInfo}
               reportMeta={getReportMeta()}
+            />
+          )}
+
+          {/* ── Cash / Bank Book ── */}
+          {activeTab === 'Cash/Bank Book' && (
+            <CashBankBookReport
+              accounts={treeAccounts}
+              fromDate={fromDate}
+              toDate={toDate}
+              locationId={viewLocationId}
+              fiscalYearId={currentUser.fiscal_year_id}
+              companyInfo={companyInfo}
+              currentUser={currentUser}
             />
           )}
 

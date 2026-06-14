@@ -755,5 +755,5 @@ const VoucherForm = ({ type, editData = null, accounts, locationId, fiscalYearId
     );
 };
 
-export default VoucherForm;
+export default React.memo(VoucherForm);
 

@@ -146,4 +146,4 @@ const Dashboard = ({ summaryStats, currentUser, onNavigate, notifCount, onShowNo
     );
 };
 
-export default Dashboard;
+export default React.memo(Dashboard);

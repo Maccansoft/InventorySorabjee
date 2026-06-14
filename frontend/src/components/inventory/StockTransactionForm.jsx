@@ -1142,4 +1142,4 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
     return ReactDOM.createPortal(modal, document.body);
 };
 
-export default StockTransactionForm;
+export default React.memo(StockTransactionForm);
