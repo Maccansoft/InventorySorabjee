@@ -25,4 +25,12 @@ jobs:
           script: |
             bash /home/deploy.sh
   
-
+      - name: Deploy to Hostinger VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SERVER_HOST }}
+          username: ${{ secrets.HOSTINGER_SERVER_USER }}
+          key: ${{ secrets.HOSTINGER_SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            bash /home/deploy.sh
