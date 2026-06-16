@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 import { TrendingUp, Printer, FileText, X, Loader, Layers, Search, XCircle } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
+import { formatAcctAmt } from '../utils/numberUtils';
 import ExportModal from './common/ExportModal';
 
 const API = '/api';
@@ -76,9 +77,9 @@ const printAllLedgers = (selectedIds, allAccounts, ledgerMap, companyInfo, repor
                     <td>${r.vno}</td>
                     <td>${r.type}</td>
                     <td>${r.desc}</td>
-                    <td style="text-align:right; color:#10b981">${r.dr > 0 ? r.dr.toFixed(0) : '—'}</td>
-                    <td style="text-align:right; color:#ef4444">${r.cr > 0 ? r.cr.toFixed(0) : '—'}</td>
-                    <td style="text-align:right; font-weight:700; color:${r.bal >= 0 ? '#0369a1' : '#dc2626'}">${r.bal.toFixed(0)}</td>
+                    <td style="text-align:right; color:#10b981">${r.dr > 0 ? formatAcctAmt(r.dr) : '—'}</td>
+                    <td style="text-align:right; color:#ef4444">${r.cr > 0 ? formatAcctAmt(r.cr) : '—'}</td>
+                    <td style="text-align:right; font-weight:700; color:${r.bal >= 0 ? '#0369a1' : '#dc2626'}">${formatAcctAmt(r.bal)}</td>
                 </tr>`).join('')
             : `<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">No transactions in selected period.</td></tr>`;
 
@@ -89,9 +90,9 @@ const printAllLedgers = (selectedIds, allAccounts, ledgerMap, companyInfo, repor
         const totalsRow = rows.length > 0 ? `
             <tr style="font-weight:800; background:#f8fafc;">
                 <td colspan="4">Totals</td>
-                <td style="text-align:right">${totalDr.toFixed(0)}</td>
-                <td style="text-align:right">${totalCr.toFixed(0)}</td>
-                <td style="text-align:right">${lastBal.toFixed(0)}</td>
+                <td style="text-align:right">${formatAcctAmt(totalDr)}</td>
+                <td style="text-align:right">${formatAcctAmt(totalCr)}</td>
+                <td style="text-align:right">${formatAcctAmt(lastBal)}</td>
             </tr>` : '';
 
         return `
@@ -203,7 +204,7 @@ const exportAllLedgersCSV = (selectedIds, allAccounts, ledgerMap) => {
             const totalDr = rows.reduce((s, r) => s + r.dr, 0);
             const totalCr = rows.reduce((s, r) => s + r.cr, 0);
             const lastBal = rows[rows.length - 1]?.bal ?? 0;
-            csvRows.push(`"TOTALS",,,, ${totalDr.toFixed(0)},${totalCr.toFixed(0)},${lastBal.toFixed(0)}`);
+            csvRows.push(`"TOTALS",,,, ${formatAcctAmt(totalDr)},${formatAcctAmt(totalCr)},${formatAcctAmt(lastBal)}`);
         }
     });
 
@@ -292,21 +293,21 @@ const LedgerTab = ({ accountInfo, ledger, loading, companyInfo, reportMeta }) =>
                                 <td><span className="badge-type">{row.voucher_type}</span></td>
                                 <td>{row.description}</td>
                                 <td className="text-right" style={{ color: '#10b981' }}>
-                                    {parseFloat(row.dr_amount || 0) > 0 ? parseFloat(row.dr_amount).toFixed(0) : '—'}
+                                    {parseFloat(row.dr_amount || 0) > 0 ? formatAcctAmt(row.dr_amount) : '—'}
                                 </td>
                                 <td className="text-right" style={{ color: '#ef4444' }}>
-                                    {parseFloat(row.cr_amount || 0) > 0 ? parseFloat(row.cr_amount).toFixed(0) : '—'}
+                                    {parseFloat(row.cr_amount || 0) > 0 ? formatAcctAmt(row.cr_amount) : '—'}
                                 </td>
                                 <td className="text-right" style={{ fontWeight: 700, color: parseFloat(row.balance) >= 0 ? '#0369a1' : '#dc2626' }}>
-                                    {parseFloat(row.balance || 0).toFixed(0)}
+                                    {formatAcctAmt(row.balance)}
                                 </td>
                             </tr>
                         ))}
                         <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
                             <td colSpan="4">Totals</td>
-                            <td className="text-right">{ledger.reduce((s, r) => s + parseFloat(r.dr_amount || 0), 0).toFixed(0)}</td>
-                            <td className="text-right">{ledger.reduce((s, r) => s + parseFloat(r.cr_amount || 0), 0).toFixed(0)}</td>
-                            <td className="text-right">{parseFloat(ledger[ledger.length - 1]?.balance || 0).toFixed(0)}</td>
+                            <td className="text-right">{formatAcctAmt(ledger.reduce((s, r) => s + parseFloat(r.dr_amount || 0), 0))}</td>
+                            <td className="text-right">{formatAcctAmt(ledger.reduce((s, r) => s + parseFloat(r.cr_amount || 0), 0))}</td>
+                            <td className="text-right">{formatAcctAmt(parseFloat(ledger[ledger.length - 1]?.balance || 0))}</td>
                         </tr>
                     </tbody>
                 </table>

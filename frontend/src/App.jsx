@@ -33,6 +33,7 @@ import BarcodeSetup from './components/inventory/BarcodeSetup';
 import Dashboard from './components/Dashboard';
 import PendingTransfersModal from './components/inventory/PendingTransfersModal';
 import { printTable, exportToCSV } from './utils/exportUtils';
+import { formatAcctAmt } from './utils/numberUtils';
 import ExportModal from './components/common/ExportModal';
 import * as XLSX from 'xlsx';
 
@@ -818,16 +819,16 @@ const App = () => {
                         <td>{r.account_code}</td>
                         <td>{r.account_name}</td>
                         <td><span className="badge-type">{r.account_type}</span></td>
-                        <td className="text-right">{parseFloat(r.total_debit || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                        <td className="text-right">{parseFloat(r.total_credit || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                        <td className="text-right">{formatAcctAmt(r.total_debit)}</td>
+                        <td className="text-right">{formatAcctAmt(r.total_credit)}</td>
                       </tr>
                     ))
                   }
                   {trialBalance.length > 0 && (
                     <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
                       <td colSpan="3">TOTAL</td>
-                      <td className="text-right">{trialBalance.reduce((s, r) => s + parseFloat(r.total_debit || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                      <td className="text-right">{trialBalance.reduce((s, r) => s + parseFloat(r.total_credit || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                      <td className="text-right">{formatAcctAmt(trialBalance.reduce((s, r) => s + parseFloat(r.total_debit || 0), 0))}</td>
+                      <td className="text-right">{formatAcctAmt(trialBalance.reduce((s, r) => s + parseFloat(r.total_credit || 0), 0))}</td>
                     </tr>
                   )}
                 </tbody>
@@ -875,7 +876,7 @@ const App = () => {
                         <td>{r.account_name}</td>
                         <td><span className="badge-type">{r.account_type}</span></td>
                         <td className="text-right" style={{ color: parseFloat(r.balance) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                          {parseFloat(r.balance).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          {formatAcctAmt(r.balance)}
                         </td>
                       </tr>
                     ))
@@ -886,7 +887,7 @@ const App = () => {
                     <tr style={{ fontWeight: 800, fontSize: '1rem' }}>
                       <td colSpan="3">NET PROFIT / (LOSS)</td>
                       <td className="text-right" style={{ color: parseFloat(profitLoss.net_profit) >= 0 ? '#10b981' : '#ef4444', fontSize: '1.1rem' }}>
-                        {parseFloat(profitLoss.net_profit || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {formatAcctAmt(profitLoss.net_profit)}
                       </td>
 
                     </tr>
@@ -945,12 +946,12 @@ const App = () => {
                               <td style={{ paddingLeft: 32 }}>{r.account_code}</td>
                               <td>{r.account_name}</td>
                               <td><span className="badge-type">{r.account_type}</span></td>
-                              <td className="text-right" style={{ fontWeight: 600 }}>{parseFloat(r.balance).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                              <td className="text-right" style={{ fontWeight: 600 }}>{formatAcctAmt(r.balance)}</td>
                             </tr>
                           ))}
                           <tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                             <td colSpan="3">Total {type === 'ASSET' ? 'Assets' : type === 'LIABILITY' ? 'Liabilities' : 'Capital'}</td>
-                            <td className="text-right">{section.reduce((s, r) => s + parseFloat(r.balance || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                            <td className="text-right">{formatAcctAmt(section.reduce((s, r) => s + parseFloat(r.balance || 0), 0))}</td>
 
                           </tr>
                         </React.Fragment>

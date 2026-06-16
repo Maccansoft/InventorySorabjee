@@ -5,6 +5,7 @@ import {
     CreditCard, Banknote, Wifi, AlignJustify, Printer, FileText
 } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
+import { formatAcctAmt } from '../utils/numberUtils';
 import ExportModal from './common/ExportModal';
 
 const API = '/api';
@@ -131,17 +132,17 @@ const VoucherDetailModal = ({ voucher, companyInfo, onPrint, onClose }) => {
                                         {voucher.voucher_type === 'JOURNAL' ? (
                                             <>
                                                 <td style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
-                                                    {parseFloat(e.dr_amount || 0) > 0 ? parseFloat(e.dr_amount).toFixed(0) : '—'}
+                                                    {parseFloat(e.dr_amount || 0) > 0 ? formatAcctAmt(e.dr_amount) : '—'}
                                                 </td>
                                                 <td style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>
-                                                    {parseFloat(e.cr_amount || 0) > 0 ? parseFloat(e.cr_amount).toFixed(0) : '—'}
+                                                    {parseFloat(e.cr_amount || 0) > 0 ? formatAcctAmt(e.cr_amount) : '—'}
                                                 </td>
                                             </>
                                         ) : (
                                             <td style={{ textAlign: 'right', fontWeight: 600 }}>
                                                 {voucher.voucher_type === 'RECEIPT'
-                                                    ? parseFloat(e.cr_amount || 0).toFixed(0)
-                                                    : parseFloat(e.dr_amount || 0).toFixed(0)
+                                                    ? formatAcctAmt(e.cr_amount)
+                                                    : formatAcctAmt(e.dr_amount)
                                                 }
                                             </td>
 
@@ -154,14 +155,13 @@ const VoucherDetailModal = ({ voucher, companyInfo, onPrint, onClose }) => {
                                 <td colSpan="2">TOTAL</td>
                                 {voucher.voucher_type === 'JOURNAL' ? (
                                     <>
-                                        <td style={{ textAlign: 'right', color: '#10b981' }}>{totalDr.toFixed(0)}</td>
-                                        <td style={{ textAlign: 'right', color: '#ef4444' }}>{totalCr.toFixed(0)}</td>
+                                        <td style={{ textAlign: 'right', color: '#10b981' }}>{formatAcctAmt(totalDr)}</td>
+                                        <td style={{ textAlign: 'right', color: '#ef4444' }}>{formatAcctAmt(totalCr)}</td>
                                     </>
                                 ) : (
                                     <td style={{ textAlign: 'right' }}>
-                                        {voucher.voucher_type === 'RECEIPT' ? totalCr.toFixed(0) : totalDr.toFixed(0)}
+                                        {voucher.voucher_type === 'RECEIPT' ? formatAcctAmt(totalCr) : formatAcctAmt(totalDr)}
                                     </td>
-
                                 )}
                             </tr>
                         </tfoot>
@@ -286,10 +286,10 @@ const VoucherList = ({
                     <div style="font-size:0.75rem; color:#666">${e.description || v.description || ''}</div>
                 </td>
                 ${isJournal ? `
-                    <td style="text-align:right">${parseFloat(e.dr_amount || 0) > 0 ? parseFloat(e.dr_amount).toFixed(0) : ''}</td>
-                    <td style="text-align:right">${parseFloat(e.cr_amount || 0) > 0 ? parseFloat(e.cr_amount).toFixed(0) : ''}</td>
+                    <td style="text-align:right">${parseFloat(e.dr_amount || 0) > 0 ? formatAcctAmt(e.dr_amount) : ''}</td>
+                    <td style="text-align:right">${parseFloat(e.cr_amount || 0) > 0 ? formatAcctAmt(e.cr_amount) : ''}</td>
                 ` : `
-                    <td style="text-align:right; font-weight:600">${isReceipt ? parseFloat(e.cr_amount).toFixed(0) : parseFloat(e.dr_amount).toFixed(0)}</td>
+                    <td style="text-align:right; font-weight:600">${isReceipt ? formatAcctAmt(e.cr_amount) : formatAcctAmt(e.dr_amount)}</td>
                 `}
 
             </tr>
@@ -377,10 +377,10 @@ const VoucherList = ({
                             <tr>
                                 <td colspan="2" style="text-align: center">TOTAL</td>
                                 ${isJournal ? `
-                                    <td style="text-align: right">${totalDr.toFixed(0)}</td>
-                                    <td style="text-align: right">${totalCr.toFixed(0)}</td>
+                                    <td style="text-align: right">${formatAcctAmt(totalDr)}</td>
+                                    <td style="text-align: right">${formatAcctAmt(totalCr)}</td>
                                 ` : `
-                                    <td style="text-align: right">${displayTotal.toFixed(0)}</td>
+                                    <td style="text-align: right">${formatAcctAmt(displayTotal)}</td>
                                 `}
 
                             </tr>
@@ -551,7 +551,7 @@ const VoucherList = ({
                                         </td>
                                     )}
                                     <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                                        {parseFloat(v.total_amount || 0).toLocaleString()}
+                                        {formatAcctAmt(v.total_amount)}
                                     </td>
 
                                     <td>
@@ -597,8 +597,7 @@ const VoucherList = ({
                                     Total ({vouchers.length} vouchers)
                                 </td>
                                 <td style={{ textAlign: 'right' }}>
-                                    {vouchers.reduce((s, v) => s + parseFloat(v.total_amount || 0), 0)
-                                        .toLocaleString()}
+                                    {formatAcctAmt(vouchers.reduce((s, v) => s + parseFloat(v.total_amount || 0), 0))}
                                 </td>
 
                                 <td></td>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { formatAcctAmt } from '../utils/numberUtils';
 import axios from 'axios';
 import { Save, X, Plus, Trash2, Hash, Loader2 } from 'lucide-react';
 import SearchableSelect from './common/SearchableSelect';
@@ -219,7 +220,7 @@ const ReceiptVoucher = ({ formData, setFormData, accounts, creditLines, setCredi
                         <tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                             <td colSpan="2" style={{ padding: '10px 12px', color: '#475569' }}>TOTALS</td>
                             <td style={{ textAlign: 'right', padding: '10px 12px', color: '#ef4444' }}>
-                                CR: {totalCr.toFixed(0)}
+                                CR: {formatAcctAmt(totalCr)}
                             </td>
 
                             <td></td>
@@ -231,16 +232,16 @@ const ReceiptVoucher = ({ formData, setFormData, accounts, creditLines, setCredi
             {/* ── Balance indicator ── */}
             <div style={{ display: 'flex', gap: 20, marginTop: 14, fontWeight: 700, fontSize: '0.9rem', alignItems: 'center' }}>
                 <span style={{ color: '#10b981' }}>
-                    DR: {chequeAmt.toFixed(0)}
+                    DR: {formatAcctAmt(chequeAmt)}
                     <span style={{ fontWeight: 400, fontSize: '0.75rem', color: '#94a3b8', marginLeft: 5 }}>
                         ({formData.payment_mode || 'Amount'})
                     </span>
                 </span>
                 <span style={{ color: '#cbd5e1' }}>|</span>
-                <span style={{ color: '#ef4444' }}>CR: {totalCr.toFixed(0)}</span>
+                <span style={{ color: '#ef4444' }}>CR: {formatAcctAmt(totalCr)}</span>
                 {chequeAmt > 0 && !isBalanced && (
                     <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600 }}>
-                        ⚠ Diff: {Math.abs(chequeAmt - totalCr).toFixed(0)}
+                        ⚠ Diff: {formatAcctAmt(Math.abs(chequeAmt - totalCr))}
                     </span>
                 )}
 
@@ -374,7 +375,7 @@ const PaymentVoucher = ({ formData, setFormData, accounts, debitLines, setDebitL
                     <tfoot>
                         <tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                             <td colSpan="2" style={{ padding: '10px 12px', color: '#475569' }}>TOTALS</td>
-                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#10b981' }}>DR: {totalDr.toFixed(0)}</td>
+                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#10b981' }}>DR: {formatAcctAmt(totalDr)}</td>
 
                             <td></td>
                         </tr>
@@ -382,10 +383,10 @@ const PaymentVoucher = ({ formData, setFormData, accounts, debitLines, setDebitL
                 </table>
             </div>
             <div style={{ display: 'flex', gap: 20, marginTop: 14, fontWeight: 700, fontSize: '0.9rem', alignItems: 'center' }}>
-                <span style={{ color: '#ef4444' }}>CR: {crAmt.toFixed(0)}</span>
+                <span style={{ color: '#ef4444' }}>CR: {formatAcctAmt(crAmt)}</span>
                 <span style={{ color: '#cbd5e1' }}>|</span>
-                <span style={{ color: '#10b981' }}>DR: {totalDr.toFixed(0)}</span>
-                {crAmt > 0 && !isBalanced && <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem' }}>⚠ Diff: {Math.abs(crAmt - totalDr).toFixed(0)}</span>}
+                <span style={{ color: '#10b981' }}>DR: {formatAcctAmt(totalDr)}</span>
+                {crAmt > 0 && !isBalanced && <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem' }}>⚠ Diff: {formatAcctAmt(Math.abs(crAmt - totalDr))}</span>}
 
                 {isBalanced && <span style={{ background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem' }}>✓ Balanced</span>}
             </div>
@@ -485,8 +486,8 @@ const StandardVoucher = ({ type, formData, setFormData, accounts, entries, setEn
                     <tfoot>
                         <tr style={{ fontWeight: 700, background: '#f8fafc' }}>
                             <td colSpan="2" style={{ padding: '10px 12px', color: '#475569' }}>TOTALS</td>
-                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#10b981' }}>{totalDr.toFixed(0)}</td>
-                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#ef4444' }}>{totalCr.toFixed(0)}</td>
+                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#10b981' }}>{formatAcctAmt(totalDr)}</td>
+                            <td style={{ textAlign: 'right', padding: '10px 12px', color: '#ef4444' }}>{formatAcctAmt(totalCr)}</td>
                             <td></td>
                         </tr>
 
@@ -495,12 +496,12 @@ const StandardVoucher = ({ type, formData, setFormData, accounts, entries, setEn
             </div>
 
             <div style={{ display: 'flex', gap: 20, marginTop: 14, fontWeight: 700, fontSize: '0.9rem', alignItems: 'center' }}>
-                <span style={{ color: '#10b981' }}>DR: {totalDr.toFixed(0)}</span>
+                <span style={{ color: '#10b981' }}>DR: {formatAcctAmt(totalDr)}</span>
                 <span style={{ color: '#cbd5e1' }}>|</span>
-                <span style={{ color: '#ef4444' }}>CR: {totalCr.toFixed(0)}</span>
+                <span style={{ color: '#ef4444' }}>CR: {formatAcctAmt(totalCr)}</span>
                 {totalDr > 0 && !isBalanced && (
                     <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600 }}>
-                        ⚠ Diff: {Math.abs(totalDr - totalCr).toFixed(0)}
+                        ⚠ Diff: {formatAcctAmt(Math.abs(totalDr - totalCr))}
                     </span>
                 )}
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { TrendingUp, TrendingDown, Printer, FileText } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
+import { formatAcctAmt } from '../utils/numberUtils';
 import ExportModal from './common/ExportModal';
 
 import SearchableSelect from './common/SearchableSelect';
@@ -138,13 +139,13 @@ const LedgerView = ({ accounts, fromDate, toDate, locationId, fiscalYearId, comp
                                         <td><span className="badge-type">{row.voucher_type}</span></td>
                                         <td>{row.description}</td>
                                         <td className="text-right" style={{ color: '#10b981' }}>
-                                            {parseFloat(row.dr_amount || 0) > 0 ? parseFloat(row.dr_amount).toFixed(0) : '—'}
+                                            {parseFloat(row.dr_amount || 0) > 0 ? formatAcctAmt(row.dr_amount) : '—'}
                                         </td>
                                         <td className="text-right" style={{ color: '#ef4444' }}>
-                                            {parseFloat(row.cr_amount || 0) > 0 ? parseFloat(row.cr_amount).toFixed(0) : '—'}
+                                            {parseFloat(row.cr_amount || 0) > 0 ? formatAcctAmt(row.cr_amount) : '—'}
                                         </td>
                                         <td className="text-right" style={{ fontWeight: 700, color: row.balance >= 0 ? '#0369a1' : '#dc2626' }}>
-                                            {parseFloat(row.balance).toFixed(0)}
+                                            {formatAcctAmt(row.balance)}
                                         </td>
 
                                     </tr>
@@ -152,9 +153,9 @@ const LedgerView = ({ accounts, fromDate, toDate, locationId, fiscalYearId, comp
                                 {/* running totals */}
                                 <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
                                     <td colSpan="4">Totals</td>
-                                    <td className="text-right">{ledger.reduce((s, r) => s + parseFloat(r.dr_amount || 0), 0).toFixed(0)}</td>
-                                    <td className="text-right">{ledger.reduce((s, r) => s + parseFloat(r.cr_amount || 0), 0).toFixed(0)}</td>
-                                    <td className="text-right">{ledger[ledger.length - 1]?.balance?.toFixed(0)}</td>
+                                    <td className="text-right">{formatAcctAmt(ledger.reduce((s, r) => s + parseFloat(r.dr_amount || 0), 0))}</td>
+                                    <td className="text-right">{formatAcctAmt(ledger.reduce((s, r) => s + parseFloat(r.cr_amount || 0), 0))}</td>
+                                    <td className="text-right">{formatAcctAmt(ledger[ledger.length - 1]?.balance)}</td>
 
                                 </tr>
                             </tbody>

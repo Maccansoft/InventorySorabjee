@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Wallet, Printer, FileText, Search, Loader } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
+import { formatAcctAmt, formatShortDate } from '../utils/numberUtils';
 import ExportModal from './common/ExportModal';
 
 const API = '/api';
@@ -26,29 +27,29 @@ const printCashBankBook = (reportData, companyInfo, reportMeta) => {
         const tableRows = rows.length > 0
             ? rows.map(r => `
                 <tr>
-                    <td>${r.date}</td>
+                    <td>${formatShortDate(r.date)}</td>
                     <td>${r.voucher_no}</td>
                     <td>${r.voucher_type}</td>
                     <td>${r.particulars || ''}</td>
-                    <td style="text-align:right; color:#10b981">${r.dr_amount > 0 ? r.dr_amount.toFixed(0) : '—'}</td>
-                    <td style="text-align:right; color:#ef4444">${r.cr_amount > 0 ? r.cr_amount.toFixed(0) : '—'}</td>
-                    <td style="text-align:right; font-weight:700; color:${r.running_balance >= 0 ? '#0369a1' : '#dc2626'}">${r.running_balance.toFixed(0)}</td>
+                    <td style="text-align:right; color:#10b981">${r.dr_amount > 0 ? formatAcctAmt(r.dr_amount) : '—'}</td>
+                    <td style="text-align:right; color:#ef4444">${r.cr_amount > 0 ? formatAcctAmt(r.cr_amount) : '—'}</td>
+                    <td style="text-align:right; font-weight:700; color:${r.running_balance >= 0 ? '#0369a1' : '#dc2626'}">${formatAcctAmt(r.running_balance)}</td>
                 </tr>`).join('')
             : `<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">No transactions in selected period.</td></tr>`;
 
         const totalsRow = `
             <tr style="font-weight:800; background:#f8fafc;">
                 <td colspan="4">Totals</td>
-                <td style="text-align:right">${acct.totalDr.toFixed(0)}</td>
-                <td style="text-align:right">${acct.totalCr.toFixed(0)}</td>
-                <td style="text-align:right">${acct.closingBalance.toFixed(0)}</td>
+                <td style="text-align:right">${formatAcctAmt(acct.totalDr)}</td>
+                <td style="text-align:right">${formatAcctAmt(acct.totalCr)}</td>
+                <td style="text-align:right">${formatAcctAmt(acct.closingBalance)}</td>
             </tr>`;
 
         return `
             <div class="ledger-section">
                 <div class="acct-heading">
                     <span class="acct-name">${acct.account_name}</span>
-                    <span class="acct-meta">Code: <b>${acct.account_code}</b> &nbsp;|&nbsp; Opening Balance: <b>${acct.openingBalance.toFixed(0)}</b></span>
+                    <span class="acct-meta">Code: <b>${acct.account_code}</b> &nbsp;|&nbsp; Opening Balance: <b>${formatAcctAmt(acct.openingBalance)}</b></span>
                 </div>
                 <table>
                     <thead>
@@ -68,9 +69,9 @@ const printCashBankBook = (reportData, companyInfo, reportMeta) => {
         <div style="margin-top: 30px; padding: 20px; border-top: 3px double #333;">
             <h3 style="margin: 0 0 10px; font-size: 16px;">Grand Totals</h3>
             <table style="width: 50%; font-size: 14px;">
-                <tr><td style="width: 150px; font-weight: 600;">Total Debit</td><td style="text-align:right; color:#10b981; font-weight: 700;">${reportData.grandTotals.dr.toFixed(0)}</td></tr>
-                <tr><td style="font-weight: 600;">Total Credit</td><td style="text-align:right; color:#ef4444; font-weight: 700;">${reportData.grandTotals.cr.toFixed(0)}</td></tr>
-                <tr><td style="font-weight: 600;">Closing Balance</td><td style="text-align:right; font-weight: 700; color:${reportData.grandTotals.closing >= 0 ? '#0369a1' : '#dc2626'}">${reportData.grandTotals.closing.toFixed(0)}</td></tr>
+                <tr><td style="width: 150px; font-weight: 600;">Total Debit</td><td style="text-align:right; color:#10b981; font-weight: 700;">${formatAcctAmt(reportData.grandTotals.dr)}</td></tr>
+                <tr><td style="font-weight: 600;">Total Credit</td><td style="text-align:right; color:#ef4444; font-weight: 700;">${formatAcctAmt(reportData.grandTotals.cr)}</td></tr>
+                <tr><td style="font-weight: 600;">Closing Balance</td><td style="text-align:right; font-weight: 700; color:${reportData.grandTotals.closing >= 0 ? '#0369a1' : '#dc2626'}">${formatAcctAmt(reportData.grandTotals.closing)}</td></tr>
             </table>
         </div>
     ` : '';
@@ -131,7 +132,7 @@ const exportCashBankBookCSV = (reportData) => {
     (reportData.accounts || []).forEach((acct, idx) => {
         if (idx > 0) csvRows.push('');
         csvRows.push(`"=== ${acct.account_code} – ${acct.account_name} ==="`);
-        csvRows.push(`"Opening Balance",,,,,,${acct.openingBalance.toFixed(0)}`);
+        csvRows.push(`"Opening Balance",,,,,,${formatAcctAmt(acct.openingBalance)}`);
         csvRows.push(`"Date","Voucher No","Type","Particulars","Debit","Credit","Running Balance"`);
         
         (acct.transactions || []).forEach(r => {
@@ -140,20 +141,20 @@ const exportCashBankBookCSV = (reportData) => {
                 `"${r.voucher_no}"`,
                 `"${r.voucher_type}"`,
                 `"${String(r.particulars || '').replace(/"/g, '""')}"`,
-                r.dr_amount,
-                r.cr_amount,
-                r.running_balance
+                formatAcctAmt(r.dr_amount),
+                formatAcctAmt(r.cr_amount),
+                formatAcctAmt(r.running_balance)
             ].join(','));
         });
-        csvRows.push(`"TOTALS",,,,${acct.totalDr.toFixed(0)},${acct.totalCr.toFixed(0)},${acct.closingBalance.toFixed(0)}`);
+        csvRows.push(`"TOTALS",,,,${formatAcctAmt(acct.totalDr)},${formatAcctAmt(acct.totalCr)},${formatAcctAmt(acct.closingBalance)}`);
     });
 
     if (reportData.accounts?.length > 0) {
         csvRows.push('');
         csvRows.push(`"=== GRAND TOTALS ==="`);
-        csvRows.push(`"Total Debit","${reportData.grandTotals.dr.toFixed(0)}"`);
-        csvRows.push(`"Total Credit","${reportData.grandTotals.cr.toFixed(0)}"`);
-        csvRows.push(`"Grand Closing Balance","${reportData.grandTotals.closing.toFixed(0)}"`);
+        csvRows.push(`"Total Debit","${formatAcctAmt(reportData.grandTotals.dr)}"`);
+        csvRows.push(`"Total Credit","${formatAcctAmt(reportData.grandTotals.cr)}"`);
+        csvRows.push(`"Grand Closing Balance","${formatAcctAmt(reportData.grandTotals.closing)}"`);
     }
 
     const csvString = csvRows.join('\n');
@@ -321,7 +322,7 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
                                 <div style={{ textAlign: 'right' }}>
                                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Opening Balance</p>
                                     <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: acct.openingBalance >= 0 ? '#0369a1' : '#dc2626' }}>
-                                        {acct.openingBalance.toFixed(0)}
+                                        {formatAcctAmt(acct.openingBalance)}
                                     </p>
                                 </div>
                             </div>
@@ -346,18 +347,18 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
                                     ) : (
                                         acct.transactions.map((t, i) => (
                                             <tr key={i}>
-                                                <td>{t.date}</td>
+                                                <td>{formatShortDate(t.date)}</td>
                                                 <td><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{t.voucher_no}</span></td>
                                                 <td><span className="badge-type">{t.voucher_type}</span></td>
                                                 <td>{t.particulars || '—'}</td>
                                                 <td style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
-                                                    {t.dr_amount > 0 ? t.dr_amount.toFixed(0) : '—'}
+                                                    {t.dr_amount > 0 ? formatAcctAmt(t.dr_amount) : '—'}
                                                 </td>
                                                 <td style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>
-                                                    {t.cr_amount > 0 ? t.cr_amount.toFixed(0) : '—'}
+                                                    {t.cr_amount > 0 ? formatAcctAmt(t.cr_amount) : '—'}
                                                 </td>
                                                 <td style={{ textAlign: 'right', fontWeight: 700, color: t.running_balance >= 0 ? '#0369a1' : '#dc2626' }}>
-                                                    {t.running_balance.toFixed(0)}
+                                                    {formatAcctAmt(t.running_balance)}
                                                 </td>
                                             </tr>
                                         ))
@@ -366,9 +367,9 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
                                 <tfoot>
                                     <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
                                         <td colSpan="4">Totals</td>
-                                        <td style={{ textAlign: 'right', color: '#10b981' }}>{acct.totalDr.toFixed(0)}</td>
-                                        <td style={{ textAlign: 'right', color: '#ef4444' }}>{acct.totalCr.toFixed(0)}</td>
-                                        <td style={{ textAlign: 'right', color: acct.closingBalance >= 0 ? '#0369a1' : '#dc2626' }}>{acct.closingBalance.toFixed(0)}</td>
+                                        <td style={{ textAlign: 'right', color: '#10b981' }}>{formatAcctAmt(acct.totalDr)}</td>
+                                        <td style={{ textAlign: 'right', color: '#ef4444' }}>{formatAcctAmt(acct.totalCr)}</td>
+                                        <td style={{ textAlign: 'right', color: acct.closingBalance >= 0 ? '#0369a1' : '#dc2626' }}>{formatAcctAmt(acct.closingBalance)}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -380,15 +381,15 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                             <div style={{ padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Total Debit</p>
-                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>{reportData.grandTotals.dr.toFixed(0)}</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>{formatAcctAmt(reportData.grandTotals.dr)}</p>
                             </div>
                             <div style={{ padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Total Credit</p>
-                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#ef4444' }}>{reportData.grandTotals.cr.toFixed(0)}</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#ef4444' }}>{formatAcctAmt(reportData.grandTotals.cr)}</p>
                             </div>
                             <div style={{ padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Grand Closing Balance</p>
-                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: reportData.grandTotals.closing >= 0 ? '#0369a1' : '#dc2626' }}>{reportData.grandTotals.closing.toFixed(0)}</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 800, color: reportData.grandTotals.closing >= 0 ? '#0369a1' : '#dc2626' }}>{formatAcctAmt(reportData.grandTotals.closing)}</p>
                             </div>
                         </div>
                     </div>

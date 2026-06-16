@@ -57,13 +57,18 @@ const InventoryTransactions = ({
     const [bulkPrintType, setBulkPrintType] = useState('INVOICE');
     const [bulkPrintSelection, setBulkPrintSelection] = useState(null);
 
-    // Advanced Filters for Sales Invoice
     const [advFromDate, setAdvFromDate] = useState('');
     const [advToDate, setAdvToDate] = useState('');
     const [advCustomer, setAdvCustomer] = useState('ALL');
     const [advMaker, setAdvMaker] = useState('ALL');
     const [advCategory, setAdvCategory] = useState('ALL');
     const [advItem, setAdvItem] = useState('ALL');
+
+    // ── Transfer-specific registry filters (frontend display only) ──
+    const [trnDestination, setTrnDestination] = useState('ALL');
+    const [trnMaker, setTrnMaker] = useState('ALL');
+    const [trnCategory, setTrnCategory] = useState('ALL');
+    const [trnPower, setTrnPower] = useState('ALL');
     
     const isTransfer = activeFilter === 'TRANSFER';
     const isTrq = activeFilter === 'TRANSFER_REQUEST';
@@ -131,6 +136,11 @@ const InventoryTransactions = ({
         setAdvMaker('ALL');
         setAdvCategory('ALL');
         setAdvItem('ALL');
+        // Reset transfer filters too
+        setTrnDestination('ALL');
+        setTrnMaker('ALL');
+        setTrnCategory('ALL');
+        setTrnPower('ALL');
     }, [activeFilter]);
 
     useEffect(() => {
@@ -167,6 +177,22 @@ const InventoryTransactions = ({
     const uniqueMakers = isAdvFilterActive ? [...new Set(transactions.map(t => t.maker_name).filter(Boolean))].sort() : [];
     const uniqueCategories = isAdvFilterActive ? [...new Set(transactions.map(t => t.category_name).filter(Boolean))].sort() : [];
     const uniqueItems = isAdvFilterActive ? [...new Set(transactions.map(t => t.power || t.lot_no).filter(Boolean))].sort() : [];
+
+    // ── Transfer filter unique options (derived from loaded data) ──
+    const trnUniqueDestinations = isTransfer ? [...new Set(filtered.map(t => t.to_location_name).filter(Boolean))].sort() : [];
+    const trnUniqueMakers       = isTransfer ? [...new Set(filtered.map(t => t.maker_name).filter(Boolean))].sort() : [];
+    const trnUniqueCategories   = isTransfer ? [...new Set(filtered.map(t => t.category_name).filter(Boolean))].sort() : [];
+    const trnUniquePowers       = isTransfer ? [...new Set(filtered.map(t => t.power).filter(Boolean))].sort() : [];
+
+    // ── Apply transfer filters on top of the search-filtered list ──
+    const transferFiltered = isTransfer
+        ? filtered.filter(t =>
+            (trnDestination === 'ALL' || t.to_location_name === trnDestination) &&
+            (trnMaker       === 'ALL' || t.maker_name       === trnMaker)       &&
+            (trnCategory    === 'ALL' || t.category_name    === trnCategory)    &&
+            (trnPower       === 'ALL' || t.power            === trnPower)
+        )
+        : filtered;
 
 
     const deleteTransaction = async (type, id) => {
@@ -291,6 +317,57 @@ const InventoryTransactions = ({
                         )}
                         <button className="btn-secondary" style={{ padding: '6px 12px', height: 36, display: 'flex', alignItems: 'center', gap: 6 }}
                             onClick={() => {
+                                if (activeFilter === 'TRANSFER') {
+                                    // ── Stock Transfer: group by trans_no, use Destination ──
+                                    const groupMap = {};
+                                    transferFiltered.forEach(t => {
+                                        const key = t.trans_no || t.id;
+                                        if (!groupMap[key]) {
+                                            groupMap[key] = {
+                                                trans_no: t.trans_no,
+                                                date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
+                                                destination: t.to_location_name || '-',
+                                                items: []
+                                            };
+                                        }
+                                        groupMap[key].items.push(t);
+                                    });
+                                    const printData = [];
+                                    Object.values(groupMap).forEach(grp => {
+                                        // Group header row
+                                        printData.push({
+                                            trans_no: grp.trans_no,
+                                            date: grp.date,
+                                            destination: grp.destination,
+                                            maker: '', category: '', power: '',
+                                            lot: '', exp_date: '', mfg_date: '', qty: ''
+                                        });
+                                        // Item rows
+                                        grp.items.forEach(t => {
+                                            printData.push({
+                                                trans_no: '',
+                                                date: '',
+                                                destination: '',
+                                                maker: t.maker_name || '-',
+                                                category: t.category_name || '-',
+                                                power: t.power || '-',
+                                                lot: t.lot_no || '-',
+                                                exp_date: formatDate(t.exp_date),
+                                                mfg_date: formatDate(t.mfg_date),
+                                                qty: formatQty(t.qty || 0)
+                                            });
+                                        });
+                                    });
+                                    printTable(
+                                        'Stock Transfer Report',
+                                        ['Transaction No', 'Date', 'Destination', 'Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date', 'Qty'],
+                                        printData,
+                                        ['trans_no', 'date', 'destination', 'maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date', 'qty'],
+                                        companyInfo, reportMeta
+                                    );
+                                    return;
+                                }
+                                // ── All other types (unchanged) ──
                                 const data = filtered.map(t => ({
                                     trans_no: t.trans_no || '-',
                                     date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
@@ -415,6 +492,65 @@ const InventoryTransactions = ({
                     </div>
                 </div>
                 
+                {isTransfer && (
+                    <div className="advanced-filters-panel" style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                            <Filter size={16} className="text-slate-500" />
+                            <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter By</h4>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                            <div className="filter-group">
+                                <label>Destination</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Destinations' },
+                                        ...trnUniqueDestinations.map(d => ({ value: d, label: d }))
+                                    ]}
+                                    value={trnDestination}
+                                    onChange={val => setTrnDestination(val)}
+                                    placeholder="All Destinations"
+                                />
+                            </div>
+                            <div className="filter-group">
+                                <label>Maker</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Makers' },
+                                        ...trnUniqueMakers.map(m => ({ value: m, label: m }))
+                                    ]}
+                                    value={trnMaker}
+                                    onChange={val => setTrnMaker(val)}
+                                    placeholder="All Makers"
+                                />
+                            </div>
+                            <div className="filter-group">
+                                <label>Category</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Categories' },
+                                        ...trnUniqueCategories.map(c => ({ value: c, label: c }))
+                                    ]}
+                                    value={trnCategory}
+                                    onChange={val => setTrnCategory(val)}
+                                    placeholder="All Categories"
+                                />
+                            </div>
+                            <div className="filter-group">
+                                <label>Power</label>
+                                <SearchableSelect
+                                    options={[
+                                        { value: 'ALL', label: 'All Powers' },
+                                        ...trnUniquePowers.map(p => ({ value: p, label: p }))
+                                    ]}
+                                    value={trnPower}
+                                    onChange={val => setTrnPower(val)}
+                                    placeholder="All Powers"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {(activeFilter === 'SALES_INVOICE' || activeFilter === 'SALES_RETURN') && (
                     <div className="advanced-filters-panel" style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -576,15 +712,149 @@ const InventoryTransactions = ({
                                         };
 
                                         if (isTransfer) {
+                                            const displayRows = transferFiltered;
                                             const formatTransferDate = (dateStr) => {
                                                 if (!dateStr) return 'N/A';
                                                 const d = new Date(dateStr);
                                                 if (isNaN(d.getTime())) return dateStr;
                                                 return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
                                             };
+
+                                            const printSingleTransfer = (trnId, e) => {
+                                                e.stopPropagation();
+                                                const rowsToPrint = displayRows.filter(t => t.id === trnId);
+                                                if (rowsToPrint.length === 0) return;
+
+                                                const firstRow = rowsToPrint[0];
+                                                const transNo = firstRow.trans_no || '-';
+                                                const transDate = formatDatePrint(firstRow.trans_date);
+                                                const fromLoc = firstRow.location_name || currentUser?.location_name || '-';
+                                                const toLoc = firstRow.to_location_name || '-';
+
+                                                let totalQty = 0;
+                                                const tableRowsHtml = rowsToPrint.map(t => {
+                                                    const qty = parseFloat(t.qty || 0);
+                                                    totalQty += qty;
+                                                    return `
+                                                        <tr>
+                                                            <td>${t.maker_name || '-'}</td>
+                                                            <td>${t.category_name || '-'}</td>
+                                                            <td>${t.power || '-'}</td>
+                                                            <td>${t.lot_no || '-'}</td>
+                                                            <td>${formatDate(t.exp_date)}</td>
+                                                            <td>${formatDate(t.mfg_date)}</td>
+                                                            <td style="text-align: right; font-weight: bold;">${formatQty(qty)}</td>
+                                                        </tr>
+                                                    `;
+                                                }).join('');
+
+                                                const win = window.open('', '_blank');
+                                                win.document.write(`
+                                                    <html>
+                                                        <head>
+                                                            <title>Stock Transfer - ${transNo}</title>
+                                                            <style>
+                                                                body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; font-size: 13px; }
+                                                                
+                                                                /* Standard Company Header Styles */
+                                                                .page-header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+                                                                .company-info h1 { margin: 0; color: #0284c7; font-size: 24px; }
+                                                                .company-info p { margin: 4px 0; font-size: 13px; color: #666; }
+                                                                .report-meta { text-align: right; }
+                                                                .report-meta h2 { margin: 0; color: #475569; font-size: 18px; text-transform: uppercase; }
+                                                                .report-meta p { margin: 3px 0; font-size: 11px; color: #64748b; }
+
+                                                                /* Transaction Header Styles */
+                                                                .header-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                                                                .left-details { flex: 1; }
+                                                                .right-details { flex: 1; text-align: right; }
+                                                                .detail-row { margin: 6px 0; font-size: 13px; }
+                                                                .detail-label { font-weight: 700; color: #475569; width: 140px; display: inline-block; }
+                                                                .location-title { font-weight: 800; font-size: 14px; margin-bottom: 8px; color: #0f172a; text-decoration: underline; }
+                                                                
+                                                                /* Table & Footer Styles */
+                                                                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                                                                th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; font-size: 12px; text-transform: uppercase; text-align: left; color: #334155; }
+                                                                td { border: 1px solid #e2e8f0; padding: 10px; font-size: 12px; color: #1e293b; }
+                                                                .footer { margin-top: 30px; text-align: right; font-size: 14px; font-weight: 800; }
+                                                                @media print { body { padding: 0; } .page-header { border-bottom-color: #000; } }
+                                                            </style>
+                                                        </head>
+                                                        <body>
+                                                            <!-- Standard Company Header -->
+                                                            <div class="page-header">
+                                                              <div class="company-info">
+                                                                <h1>${companyInfo?.CompanyName || 'FA SYSTEM'}</h1>
+                                                                <p>${companyInfo?.Address || ''}</p>
+                                                                <p>
+                                                                  ${companyInfo?.Contact ? `Contact: ${companyInfo.Contact}` : ''}
+                                                                  ${companyInfo?.FaxNo ? ` | Fax: ${companyInfo.FaxNo}` : ''}
+                                                                </p>
+                                                                <p>${companyInfo?.Email || ''}</p>
+                                                                <p style="font-size: 11px; margin-top: 5px; color: #475569;">
+                                                                    ${[
+                                                                        companyInfo?.NTNo ? `NTN: ${companyInfo.NTNo}` : '',
+                                                                        companyInfo?.GSTNo ? `GST: ${companyInfo.GSTNo}` : '',
+                                                                        companyInfo?.GovtNo ? `Govt No: ${companyInfo.GovtNo}` : '',
+                                                                        companyInfo?.IATACode ? `IATA: ${companyInfo.IATACode}` : ''
+                                                                    ].filter(Boolean).join(' | ')}
+                                                                </p>
+                                                              </div>
+                                                              <div class="report-meta">
+                                                                <h2>Stock Transfer</h2>
+                                                                ${reportMeta?.fiscalYear ? `<p>Fiscal Year: ${reportMeta.fiscalYear}</p>` : ''}
+                                                                ${reportMeta?.location ? `<p>Location: ${reportMeta.location}</p>` : ''}
+                                                                <p>Printed on: ${new Date().toLocaleString()}</p>
+                                                              </div>
+                                                            </div>
+
+                                                            <!-- Transaction Detail Header -->
+                                                            <div class="header-section">
+                                                                <div class="left-details">
+                                                                    <div class="detail-row"><span class="detail-label">TRANSACTION NO</span> : ${transNo}</div>
+                                                                    <div class="detail-row"><span class="detail-label">TRANSACTION DATE</span> : ${transDate}</div>
+                                                                </div>
+                                                                <div class="right-details">
+                                                                    <div class="location-title">LOCATION DETAILS</div>
+                                                                    <div class="detail-row"><span class="detail-label" style="width: 50px;">FROM</span> : ${fromLoc}</div>
+                                                                    <div class="detail-row"><span class="detail-label" style="width: 50px;">TO</span> : ${toLoc}</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Table -->
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>MAKER</th>
+                                                                        <th>CATEGORY</th>
+                                                                        <th>POWER</th>
+                                                                        <th>LOT NO</th>
+                                                                        <th>EXP DATE</th>
+                                                                        <th>MFG DATE</th>
+                                                                        <th style="text-align: right;">QTY</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    ${tableRowsHtml}
+                                                                </tbody>
+                                                            </table>
+
+                                                            <!-- Footer -->
+                                                            <div class="footer">
+                                                                TOTAL QUANTITY : ${formatQty(totalQty)}
+                                                            </div>
+                                                            <script>
+                                                                window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); };
+                                                            </script>
+                                                        </body>
+                                                    </html>
+                                                `);
+                                                win.document.close();
+                                            };
+
                                             // ── IN-MEMORY DATA TRANSFORMATION: TRANSFER GROUPING ──
                                             const groupedMap = {};
-                                            filtered.forEach(t => {
+                                            displayRows.forEach(t => {
                                                 const trnKey = `${t._type}-${t.id}`;
                                                 if (!groupedMap[trnKey]) {
                                                     groupedMap[trnKey] = {
@@ -635,6 +905,7 @@ const InventoryTransactions = ({
                                                         <td colSpan={12}></td>
                                                         <td className="text-center">
                                                             <div className="flex justify-center gap-2">
+                                                                <button onClick={(e) => printSingleTransfer(trn.id, e)} className="text-emerald-500 hover:text-emerald-700 p-1" title="Print Transaction"><Printer size={16} /></button>
                                                                 <button onClick={() => setActiveForm({ type: trn._type, editId: trn.id, detailId: null })} className="text-blue-500 hover:text-blue-700 p-1" title="Edit Transaction"><FileText size={16} /></button>
                                                                 <button onClick={() => deleteTransaction(trn._type, trn.id)} className="text-red-500 hover:text-red-700 p-1" title="Delete Transaction"><Trash2 size={16} /></button>
                                                             </div>
@@ -924,10 +1195,97 @@ const InventoryTransactions = ({
                     if (activeFilter !== 'STOCK_TRANSFER_RETURN') fields.push('total', 'party');
 
                     if (format === 'EXCEL') {
-                        exportToCSV(`${currentTypeInfo?.type || 'Inventory'}_Registry`, headers, data, fields);
+                        if (activeFilter === 'TRANSFER') {
+                            // ── Stock Transfer export: group by trans_no, Destination column ──
+                            const groupMap = {};
+                            transferFiltered.forEach(t => {
+                                const key = t.trans_no || t.id;
+                                if (!groupMap[key]) {
+                                    groupMap[key] = {
+                                        trans_no: t.trans_no,
+                                        date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
+                                        destination: t.to_location_name || '-',
+                                        items: []
+                                    };
+                                }
+                                groupMap[key].items.push(t);
+                            });
+                            const exportData = [];
+                            Object.values(groupMap).forEach(grp => {
+                                exportData.push({
+                                    trans_no: grp.trans_no,
+                                    date: grp.date,
+                                    destination: grp.destination,
+                                    maker: '', category: '', power: '',
+                                    lot: '', exp_date: '', mfg_date: '', qty: ''
+                                });
+                                grp.items.forEach(t => {
+                                    exportData.push({
+                                        trans_no: '',
+                                        date: '',
+                                        destination: '',
+                                        maker: t.maker_name || '-',
+                                        category: t.category_name || '-',
+                                        power: t.power || '-',
+                                        lot: t.lot_no || '-',
+                                        exp_date: formatDate(t.exp_date),
+                                        mfg_date: formatDate(t.mfg_date),
+                                        qty: formatQty(t.qty || 0)
+                                    });
+                                });
+                            });
+                            exportToCSV(
+                                'Stock_Transfer_Registry',
+                                ['Transaction No', 'Date', 'Destination', 'Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date', 'Qty'],
+                                exportData,
+                                ['trans_no', 'date', 'destination', 'maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date', 'qty']
+                            );
+                        } else {
+                            exportToCSV(`${currentTypeInfo?.type || 'Inventory'}_Registry`, headers, data, fields);
+                        }
                     } else {
-                        const reportName = `${currentTypeInfo?.label || 'Inventory'} Report`;
-                        printTable(reportName, headers, data, fields, companyInfo, reportMeta);
+                        if (activeFilter === 'TRANSFER') {
+                            // Print path already handled above in the Print button
+                            const groupMap = {};
+                            transferFiltered.forEach(t => {
+                                const key = t.trans_no || t.id;
+                                if (!groupMap[key]) {
+                                    groupMap[key] = {
+                                        trans_no: t.trans_no,
+                                        date: t.trans_date ? new Date(t.trans_date).toLocaleDateString() : '-',
+                                        destination: t.to_location_name || '-',
+                                        items: []
+                                    };
+                                }
+                                groupMap[key].items.push(t);
+                            });
+                            const printData = [];
+                            Object.values(groupMap).forEach(grp => {
+                                printData.push({
+                                    trans_no: grp.trans_no, date: grp.date, destination: grp.destination,
+                                    maker: '', category: '', power: '', lot: '', exp_date: '', mfg_date: '', qty: ''
+                                });
+                                grp.items.forEach(t => {
+                                    printData.push({
+                                        trans_no: '', date: '', destination: '',
+                                        maker: t.maker_name || '-', category: t.category_name || '-',
+                                        power: t.power || '-', lot: t.lot_no || '-',
+                                        exp_date: formatDate(t.exp_date), mfg_date: formatDate(t.mfg_date),
+                                        qty: formatQty(t.qty || 0)
+                                    });
+                                });
+                            });
+                            printTable(
+                                'Stock Transfer Report',
+                                ['Transaction No', 'Date', 'Destination', 'Maker', 'Category', 'Power', 'Lot No', 'Exp Date', 'Mfg Date', 'Qty'],
+                                printData,
+                                ['trans_no', 'date', 'destination', 'maker', 'category', 'power', 'lot', 'exp_date', 'mfg_date', 'qty'],
+                                companyInfo, reportMeta
+                            );
+                        } else {
+                            const reportName = `${currentTypeInfo?.label || 'Inventory'} Report`;
+                            printTable(reportName, headers, data, fields, companyInfo, reportMeta);
+                        }
                     }
                 }}
             />

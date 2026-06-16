@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Printer, FileText, Search } from 'lucide-react';
 import { printTable, exportToCSV } from '../utils/exportUtils';
+import { formatAcctAmt } from '../utils/numberUtils';
 import ExportModal from './common/ExportModal';
 
 const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalYearId, companyInfo, reportMeta }) => {
@@ -10,6 +11,7 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
     const [error, setError] = useState('');
     const [exportModal, setExportModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [hideZero, setHideZero] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -43,7 +45,8 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
 
     const title = type === 'RECEIVABLES' ? 'Receivables Report' : 'Payables Report';
 
-    const filteredData = reportData.filter(r => {
+    // Step 1: apply text search
+    const searchFiltered = reportData.filter(r => {
         const query = searchQuery.toLowerCase().trim();
         if (!query) return true;
         return (
@@ -52,6 +55,11 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
         );
     });
 
+    // Step 2: optionally hide zero-balance rows (display filter only)
+    const filteredData = hideZero
+        ? searchFiltered.filter(r => parseFloat(r.net_balance || 0) !== 0)
+        : searchFiltered;
+
     const handlePrint = () => {
         const headers = ['Account Code', 'Account Name', 'Net Balance'];
         const fields = ['account_code', 'account_name', 'net_balance'];
@@ -59,14 +67,14 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
         const rows = filteredData.map(r => ({
             account_code: r.account_code,
             account_name: r.account_name,
-            net_balance: parseFloat(r.net_balance || 0).toFixed(0)
+            net_balance: formatAcctAmt(r.net_balance)
         }));
 
         const totalBalance = filteredData.reduce((s, r) => s + parseFloat(r.net_balance || 0), 0);
         rows.push({
             account_code: 'TOTAL',
             account_name: '',
-            net_balance: totalBalance.toFixed(0)
+            net_balance: formatAcctAmt(totalBalance)
         });
 
         printTable(title, headers, rows, fields, companyInfo, reportMeta);
@@ -79,14 +87,14 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
         const rows = filteredData.map(r => ({
             account_code: r.account_code,
             account_name: r.account_name,
-            net_balance: parseFloat(r.net_balance || 0).toFixed(0)
+            net_balance: formatAcctAmt(r.net_balance)
         }));
 
         const totalBalance = filteredData.reduce((s, r) => s + parseFloat(r.net_balance || 0), 0);
         rows.push({
             account_code: 'TOTAL',
             account_name: '',
-            net_balance: totalBalance.toFixed(0)
+            net_balance: formatAcctAmt(totalBalance)
         });
 
         if (format === 'EXCEL') {
@@ -130,15 +138,48 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
                 </div>
             ) : (
                 <div>
-                    {/* Premium Search Bar */}
-                    <div className="table-search-premium" style={{ marginBottom: '20px' }}>
-                        <Search size={18} className="search-icon" />
-                        <input
-                            type="text"
-                            placeholder="Search by Code or Name..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
+                    {/* Search bar + Hide Zero checkbox — same row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: '20px', flexWrap: 'wrap' }}>
+                        {/* Search box */}
+                        <div className="table-search-premium" style={{ flex: 1, minWidth: 220, marginBottom: 0 }}>
+                            <Search size={18} className="search-icon" />
+                            <input
+                                type="text"
+                                placeholder="Search by Code or Name..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Hide Zero Balance checkbox */}
+                        <label
+                            htmlFor="hideZeroChk"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                color: hideZero ? '#0284c7' : '#475569',
+                                background: hideZero ? '#e0f2fe' : '#f8fafc',
+                                border: `1.5px solid ${hideZero ? '#7dd3fc' : '#e2e8f0'}`,
+                                borderRadius: 8,
+                                padding: '7px 14px',
+                                userSelect: 'none',
+                                transition: 'all 0.15s',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            <input
+                                id="hideZeroChk"
+                                type="checkbox"
+                                checked={hideZero}
+                                onChange={e => setHideZero(e.target.checked)}
+                                style={{ width: 15, height: 15, accentColor: '#0284c7', cursor: 'pointer' }}
+                            />
+                            Hide Zero Balance
+                        </label>
                     </div>
 
                     {filteredData.length === 0 ? (
@@ -163,7 +204,7 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
                                                 <td>{row.account_code}</td>
                                                 <td>{row.account_name}</td>
                                                 <td className="text-right" style={{ fontWeight: 700, color: balance >= 0 ? '#0369a1' : '#dc2626' }}>
-                                                    {balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                    {formatAcctAmt(balance)}
                                                 </td>
                                             </tr>
                                         );
@@ -171,7 +212,7 @@ const ReceivablesPayablesReport = ({ type, fromDate, toDate, locationId, fiscalY
                                     <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
                                         <td colSpan="2">TOTAL</td>
                                         <td className="text-right" style={{ color: totalNetBalance >= 0 ? '#0369a1' : '#dc2626' }}>
-                                            {totalNetBalance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                            {formatAcctAmt(totalNetBalance)}
                                         </td>
                                     </tr>
                                 </tbody>
