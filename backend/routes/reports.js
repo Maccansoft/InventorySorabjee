@@ -401,7 +401,45 @@ router.get('/payables', async (req, res) => {
 
 // Cash/Bank Book Report API
 router.get('/cash-bank-book', async (req, res) => {
-    const { fromDate, toDate, accountType, accountId, location_id, fiscal_year_id, all_locations } = req.query;
+    const { accountType, accountId } = req.query;
+
+    // ── Security: Enforce location & fiscal-year from JWT token ──────────────
+    // The JWT (req.user) is the authoritative source for what the logged-in user
+    // is allowed to see. We never trust frontend query params alone for access control.
+    const jwtUser = req.user || {};
+    const isHeadOffice = !!jwtUser.is_head_office;
+
+    // Determine effective location constraint:
+    //   - Non-HO user  → always restricted to their own location_id (JWT)
+    //   - HO SuperAdmin → can optionally filter by a specific location, or see all
+    let enforcedLocationId = null;
+    let all_locations = false;
+
+    if (!isHeadOffice) {
+        // Hard-enforce the user's own location regardless of any query param
+        enforcedLocationId = jwtUser.location_id || null;
+    } else {
+        const requestedLoc = req.query.location_id ? parseInt(req.query.location_id) : null;
+        if (requestedLoc) {
+            enforcedLocationId = requestedLoc;
+        } else {
+            all_locations = true;
+        }
+    }
+
+    // Fiscal year: always use the session fiscal year from JWT
+    const enforcedFiscalYearId = jwtUser.fiscal_year_id || null;
+
+    // Clamp the requested date range to fiscal year boundaries
+    const fyStart = jwtUser.fiscal_year_start ? jwtUser.fiscal_year_start.split('T')[0] : null;
+    const fyEnd   = jwtUser.fiscal_year_end   ? jwtUser.fiscal_year_end.split('T')[0]   : null;
+
+    let fromDate = req.query.fromDate || fyStart || '1970-01-01';
+    let toDate   = req.query.toDate   || fyEnd   || '9999-12-31';
+
+    if (fyStart && fromDate < fyStart) fromDate = fyStart;
+    if (fyEnd   && toDate   > fyEnd)   toDate   = fyEnd;
+
     try {
         // Step 1: Identify all Cash and Bank accounts
         const [allAccounts] = await db.query('SELECT id, parent_id, is_main, account_code, account_name FROM chart_of_accounts WHERE is_active = TRUE');
@@ -443,24 +481,25 @@ router.get('/cash-bank-book', async (req, res) => {
             return res.json({ accounts: [], grandTotals: { dr: 0, cr: 0, closing: 0 } });
         }
 
-        // Filters
+        // Filters — using JWT-enforced values (not raw query params)
         let locFilter = '';
         let fyFilter = '';
         const queryParamsOb = [];
         const queryParamsTr = [];
         
-        if (location_id && all_locations !== 'true') {
+        if (enforcedLocationId && !all_locations) {
             locFilter = ' AND v.location_id = ?';
-            queryParamsOb.push(location_id);
-            queryParamsTr.push(location_id);
+            queryParamsOb.push(enforcedLocationId);
+            queryParamsTr.push(enforcedLocationId);
         }
-        if (fiscal_year_id) {
+        if (enforcedFiscalYearId) {
             fyFilter = ' AND v.fiscal_year_id = ?';
-            queryParamsOb.push(fiscal_year_id);
-            queryParamsTr.push(fiscal_year_id);
+            queryParamsOb.push(enforcedFiscalYearId);
+            queryParamsTr.push(enforcedFiscalYearId);
         }
 
-        const openDateParam = fromDate || '1970-01-01';
+        const openDateParam = fromDate;
+
 
         // For Opening Balance: date < fromDate
         const obSql = `
@@ -497,7 +536,7 @@ router.get('/cash-bank-book', async (req, res) => {
             WHERE ve.account_id IN (?) AND v.date BETWEEN ? AND ? ${locFilter} ${fyFilter}
             ORDER BY coa.account_code, v.date ASC, v.id ASC
         `;
-        const [trRows] = await db.query(trSql, [selectedIds, openDateParam, toDate || '9999-12-31', ...queryParamsTr]);
+        const [trRows] = await db.query(trSql, [selectedIds, openDateParam, toDate, ...queryParamsTr]);
 
         // Group by account
         const accountData = {};

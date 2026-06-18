@@ -172,7 +172,7 @@ const exportCashBankBookCSV = (reportData) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDate, locationId, fiscalYearId, companyInfo, currentUser }) => {
+const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDate, locationId, isHeadOffice, fiscalYearId, fiscalYearStart, fiscalYearEnd, companyInfo, currentUser }) => {
     const allAccounts = flattenAccounts(accounts);
     
     // Find all potential Cash/Bank accounts based on name matching
@@ -206,12 +206,33 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
         setLoading(true);
         setReportData(null);
         try {
+            // ── Fiscal Year Boundary Clamping ─────────────────────────────────
+            // Ensure the selected date range doesn't exceed the active fiscal year
+            const fyStart = fiscalYearStart ? fiscalYearStart.split('T')[0] : null;
+            const fyEnd   = fiscalYearEnd   ? fiscalYearEnd.split('T')[0]   : null;
+
+            let clampedFrom = fromDate;
+            let clampedTo   = toDate;
+
+            if (fyStart && clampedFrom && clampedFrom < fyStart) clampedFrom = fyStart;
+            if (fyEnd   && clampedTo   && clampedTo   > fyEnd)   clampedTo   = fyEnd;
+
+            // ── Location filter ───────────────────────────────────────────────
+            // Only send all_locations=true when user is Head Office SuperAdmin
+            // AND has not filtered to a specific location (locationId is null/0).
+            // For every other user, always send their own location_id.
+            const locationParams = locationId
+                ? { location_id: locationId }
+                : isHeadOffice
+                    ? { all_locations: 'true' }
+                    : {}; // fallback – should never happen (non-HO always has locationId)
+
             const params = {
-                fromDate,
-                toDate,
+                fromDate: clampedFrom,
+                toDate: clampedTo,
                 accountType,
                 ...(accountId ? { accountId } : {}),
-                ...(locationId ? { location_id: locationId } : { all_locations: 'true' }),
+                ...locationParams,
                 ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {})
             };
             const { data } = await axios.get(`${API}/reports/cash-bank-book`, { params });
@@ -225,7 +246,10 @@ const CashBankBookReport = ({ accounts, fromDate: propFromDate, toDate: propToDa
 
     const handleExport = (format) => {
         if (!reportData) return;
-        const reportMeta = { fromDate, toDate, location: locationId ? 'Selected Location' : 'All Locations' };
+        const locationLabel = locationId
+            ? (currentUser?.location_name || `Location #${locationId}`)
+            : (isHeadOffice ? 'All Locations' : (currentUser?.location_name || 'Unknown'));
+        const reportMeta = { fromDate, toDate, location: locationLabel };
         if (format === 'EXCEL') {
             exportCashBankBookCSV(reportData);
         } else {

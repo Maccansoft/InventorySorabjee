@@ -730,8 +730,11 @@ const App = () => {
               accounts={treeAccounts}
               fromDate={fromDate}
               toDate={toDate}
-              locationId={viewLocationId}
+              locationId={effectiveLocationId}
+              isHeadOffice={!!currentUser.is_head_office}
               fiscalYearId={currentUser.fiscal_year_id}
+              fiscalYearStart={currentUser.fiscal_year_start}
+              fiscalYearEnd={currentUser.fiscal_year_end}
               companyInfo={companyInfo}
               currentUser={currentUser}
             />

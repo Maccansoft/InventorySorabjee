@@ -1428,7 +1428,39 @@ const createTxEndPoints = (config) => {
 };
 
 
+// ── PROFESSIONAL STOCK PURCHASE PRINTING ──
+router.get('/purchases/print/:id', async (req, res) => {
+    try {
+        const [headers] = await db.query(`
+            SELECT p.*, s.name as supplier_name, s.address as supplier_address, s.mobile as supplier_mobile
+            FROM purchases p
+            LEFT JOIN suppliers s ON p.supplier_id = s.id
+            WHERE p.id = ?
+        `, [req.params.id]);
+
+        if (!headers[0]) return res.status(404).json({ error: 'Purchase not found' });
+
+        const [details] = await db.query(`
+            SELECT
+                d.*,
+                m.name  as maker_name,
+                cat.name as category_name,
+                cat.description as category_description,
+                p.power
+            FROM purchase_details d
+            JOIN makers m       ON d.maker_id    = m.id
+            JOIN categories cat ON d.category_id = cat.id
+            LEFT JOIN powers p  ON d.power_id    = p.id
+            WHERE d.purchase_id = ?
+            ORDER BY d.id ASC
+        `, [req.params.id]);
+
+        res.json({ ...headers[0], details });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── PROFESSIONAL SALES INVOICE PRINTING ──
+
 router.get('/sales/print/:id', async (req, res) => {
     try {
         const [headers] = await db.query(`
@@ -1460,6 +1492,38 @@ router.get('/sales/print/:id', async (req, res) => {
         res.json({ ...headers[0], details });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── PROFESSIONAL SALES RETURN PRINTING ──
+router.get('/sales-returns/print/:id', async (req, res) => {
+    try {
+        const [headers] = await db.query(`
+            SELECT sr.*, c.name as customer_name, c.address as customer_address, c.mobile as customer_mobile
+            FROM sales_returns sr
+            LEFT JOIN customers c ON sr.customer_id = c.id
+            WHERE sr.id = ?
+        `, [req.params.id]);
+
+        if (!headers[0]) return res.status(404).json({ error: 'Sales Return not found' });
+
+        const [details] = await db.query(`
+            SELECT
+                d.*,
+                m.name  as maker_name,
+                cat.name as category_name,
+                cat.description as category_description,
+                p.power
+            FROM sales_return_details d
+            JOIN makers m   ON d.maker_id    = m.id
+            JOIN categories cat ON d.category_id = cat.id
+            LEFT JOIN powers p  ON d.power_id    = p.id
+            WHERE d.sales_return_id = ?
+            ORDER BY d.id ASC
+        `, [req.params.id]);
+
+        res.json({ ...headers[0], details });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 
 // ── BULK SALES INVOICE PRINTING ──
 router.get('/sales/print-bulk', async (req, res) => {

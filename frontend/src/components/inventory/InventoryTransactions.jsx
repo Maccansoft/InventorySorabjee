@@ -8,6 +8,8 @@ import ExportModal from '../common/ExportModal';
 import ImportModal from '../common/ImportModal';
 import StockTransactionForm from './StockTransactionForm';
 import SalesInvoicePrint from './SalesInvoicePrint';
+import SalesReturnPrint from './SalesReturnPrint';
+import PurchasePrint from './PurchasePrint';
 import BulkPrintModal from './BulkPrintModal';
 import BulkSalesInvoicePrint from './BulkSalesInvoicePrint';
 
@@ -51,7 +53,9 @@ const InventoryTransactions = ({
     const [activeFilter, setActiveFilter] = useState(initialType);
     const [exportModal, setExportModal] = useState(false);
     const [importModal, setImportModal] = useState(false);
-    const [showPrint, setShowPrint] = useState(null); // stores invoice ID
+    const [showPrint, setShowPrint] = useState(null);                   // Sales Invoice ID
+    const [showSalesReturnPrint, setShowSalesReturnPrint] = useState(null); // Sales Return ID
+    const [showPurchasePrint, setShowPurchasePrint] = useState(null);       // Stock Purchase ID
     const [filterLocationId, setFilterLocationId] = useState(viewLocationId);
     const [bulkPrintModal, setBulkPrintModal] = useState(false);
     const [bulkPrintType, setBulkPrintType] = useState('INVOICE');
@@ -1045,6 +1049,12 @@ const InventoryTransactions = ({
                                                                     {t._type === 'SALES_INVOICE' && (
                                                                         <button onClick={() => setShowPrint(t.id)} className="text-emerald-600 hover:text-emerald-800 transition-colors p-1" title="Print Professional Invoice"><Printer size={16} /></button>
                                                                     )}
+                                                                    {t._type === 'SALES_RETURN' && (
+                                                                        <button onClick={() => setShowSalesReturnPrint(t.id)} className="text-orange-500 hover:text-orange-700 transition-colors p-1" title="Print Sales Return"><Printer size={16} /></button>
+                                                                    )}
+                                                                    {t._type === 'PURCHASE' && (
+                                                                        <button onClick={() => setShowPurchasePrint(t.id)} className="text-blue-600 hover:text-blue-800 transition-colors p-1" title="Print Stock Purchase"><Printer size={16} /></button>
+                                                                    )}
                                                                     <button onClick={() => setActiveForm({ type: t._type, editId: t.id, detailId: t.detail_id })} className="text-blue-500 hover:text-blue-700 transition-colors p-1" title="Edit transaction"><FileText size={16} /></button>
                                                                     <button onClick={() => deleteTransaction(t._type, t.id)} className="text-red-500 hover:text-red-700 transition-colors p-1" title="Delete entire transaction"><Trash2 size={16} /></button>
                                                                 </div>
@@ -1106,6 +1116,22 @@ const InventoryTransactions = ({
                     invoiceId={showPrint}
                     companyInfo={companyInfo}
                     onClose={() => setShowPrint(null)}
+                />
+            )}
+
+            {showSalesReturnPrint && (
+                <SalesReturnPrint
+                    returnId={showSalesReturnPrint}
+                    companyInfo={companyInfo}
+                    onClose={() => setShowSalesReturnPrint(null)}
+                />
+            )}
+
+            {showPurchasePrint && (
+                <PurchasePrint
+                    purchaseId={showPurchasePrint}
+                    companyInfo={companyInfo}
+                    onClose={() => setShowPurchasePrint(null)}
                 />
             )}
 
