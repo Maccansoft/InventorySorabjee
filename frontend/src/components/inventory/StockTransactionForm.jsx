@@ -4,8 +4,9 @@ import { formatAmount, formatQty } from '../../utils/numberUtils';
 import axios from 'axios';
 import {
     Plus, Save, Loader, Search, BookOpen, ShoppingCart, Repeat,
-    Truck, FileText, RefreshCw, CheckCircle, AlertCircle
+    Truck, FileText, RefreshCw, CheckCircle, AlertCircle, Upload
 } from 'lucide-react';
+import PurchaseImportModal from './PurchaseImportModal';
 
 import SalesInvoicePrint from './SalesInvoicePrint';
 import SearchableSelect from '../common/SearchableSelect';
@@ -48,6 +49,7 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
     const [showPrintId, setShowPrintId] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState(null);
+    const [showImportModal, setShowImportModal] = useState(false); // Import Data feature
     const [salesRates, setSalesRates] = useState({ a_rates: [], b_rates: [] });
 
     const [header, setHeader] = useState({
@@ -976,7 +978,36 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         <div className={`modal-overlay ${isClosing ? 'closing' : ''}`} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: 24 }}>
             <div className="modal-card" style={{ background: 'white', borderRadius: 24, width: '98%', maxWidth: 1800, height: '94vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.25)' }}>
 
-                <FormHeader label={label} icon={icon} color={color} accent={accent} bgColor={bgColor} currentUser={currentUser} onClose={() => { setIsClosing(true); setTimeout(onClose, 300); }} />
+                <FormHeader label={label} icon={icon} color={color} accent={accent} bgColor={bgColor} currentUser={currentUser} onClose={() => { setIsClosing(true); setTimeout(onClose, 300); }}
+                    // ── Import Data button (PURCHASE only, new records only) ──
+                    importButton={type === 'PURCHASE' && !editId ? (
+                        <button
+                            type="button"
+                            id="btn-import-purchase-data"
+                            onClick={() => setShowImportModal(true)}
+                            title="Import multiple purchase rows from Excel"
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 7,
+                                background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                                border: '1.5px solid #93c5fd',
+                                color: '#1d4ed8',
+                                borderRadius: 10,
+                                padding: '8px 16px',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                letterSpacing: '0.01em',
+                                boxShadow: '0 2px 8px #2563eb15',
+                                transition: 'all 0.2s',
+                                whiteSpace: 'nowrap',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, #dbeafe, #bfdbfe)'; e.currentTarget.style.boxShadow = '0 4px 12px #2563eb25'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, #eff6ff, #dbeafe)'; e.currentTarget.style.boxShadow = '0 2px 8px #2563eb15'; }}
+                        >
+                            <Upload size={14} /> Import Data
+                        </button>
+                    ) : null}
+                />
                 
                 <form 
                     onSubmit={handleSubmit} 
@@ -1139,7 +1170,22 @@ const StockTransactionForm = ({ type, editId, detailId, currentUser, onClose, on
         </div>
     );
 
-    return ReactDOM.createPortal(modal, document.body);
+    return (
+        <>
+            {ReactDOM.createPortal(modal, document.body)}
+            {/* ── Import Data Modal — isolated, does not affect existing form ── */}
+            {showImportModal && (
+                <PurchaseImportModal
+                    currentUser={currentUser}
+                    onClose={() => setShowImportModal(false)}
+                    onImportSuccess={() => {
+                        if (onSave) onSave(true);
+                        setShowImportModal(false);
+                    }}
+                />
+            )}
+        </>
+    );
 };
 
 export default React.memo(StockTransactionForm);

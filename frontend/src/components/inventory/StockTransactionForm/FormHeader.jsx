@@ -1,7 +1,7 @@
 import React from 'react';
 import { MapPin, Calendar, Plus } from 'lucide-react';
 
-const FormHeader = ({ label, icon, color, accent, bgColor, currentUser, onClose }) => {
+const FormHeader = ({ label, icon, color, accent, bgColor, currentUser, onClose, importButton }) => {
     return (
         <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -24,30 +24,35 @@ const FormHeader = ({ label, icon, color, accent, bgColor, currentUser, onClose 
                     </div>
                 </div>
             </div>
-            <button
-                type="button"
-                onClick={onClose}
-                className="hover-scale"
-                title="Close Form"
-                style={{
-                    background: '#f1f5f9',
-                    border: '1px solid #e2e8f0',
-                    width: 36, height: 36,
-                    borderRadius: 10,
-                    fontSize: '0.9rem',
-                    cursor: 'pointer',
-                    color: '#64748b',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                }}
-            >
-                <Plus size={20} style={{ transform: 'rotate(45deg)' }} />
-            </button>
+            {/* Right side: optional import button + close */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {importButton}
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="hover-scale"
+                    title="Close Form"
+                    style={{
+                        background: '#f1f5f9',
+                        border: '1px solid #e2e8f0',
+                        width: 36, height: 36,
+                        borderRadius: 10,
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        color: '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    <Plus size={20} style={{ transform: 'rotate(45deg)' }} />
+                </button>
+            </div>
         </div>
     );
 };
 
 export default FormHeader;
+

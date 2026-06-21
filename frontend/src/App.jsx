@@ -7,7 +7,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, BookMarked,
   Users, Calendar, MapPin, LogOut, Settings, ChevronDown,
   Building2, ShieldCheck, Shield, Filter, Eye, ShoppingCart,
-  Repeat, Truck, RefreshCw, Printer, Barcode, Bell, Upload, Layers
+  Repeat, Truck, RefreshCw, Printer, Barcode, Bell, Upload, Layers, Search
 } from 'lucide-react';
 import VoucherForm from './components/VoucherForm';
 import VoucherList from './components/VoucherList';
@@ -29,6 +29,7 @@ import CustomerMaster from './components/inventory/CustomerMaster';
 import InventoryTransactions from './components/inventory/InventoryTransactions';
 import StockReport from './components/inventory/StockReport';
 import SalesReport from './components/inventory/SalesReport';
+import SearchItemReport from './components/inventory/SearchItemReport';
 import BarcodeSetup from './components/inventory/BarcodeSetup';
 import Dashboard from './components/Dashboard';
 import PendingTransfersModal from './components/inventory/PendingTransfersModal';
@@ -207,6 +208,7 @@ const App = () => {
       label: 'Stock Reports',
       items: [
         { icon: <FileText size={18} />, label: 'Stock Report' },
+        { icon: <Search size={18} />, label: 'Search Item' },
       ]
     },
     {
@@ -575,6 +577,7 @@ const App = () => {
                 {activeTab === 'Stock Transactions' && <ShoppingCart size={24} />}
                 {activeTab === 'Transfer Request' && <Truck size={24} />}
                 {activeTab === 'Stock Report' && <FileText size={24} />}
+                {activeTab === 'Search Item' && <Search size={24} />}
                 {activeTab === 'Barcode Setup' && <Barcode size={24} />}
                 {activeTab === 'Sales Return' && <RefreshCw size={24} />}
                 {activeTab === 'Stock Return' && <RefreshCw size={24} />}
@@ -1018,6 +1021,7 @@ const App = () => {
           {activeTab === 'Stock Return' && <InventoryTransactions initialType="STOCK_TRANSFER_RETURN" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Transactions' && <InventoryTransactions initialType="ALL" currentUser={currentUser} isFYClosed={isFYClosed} companyInfo={companyInfo} reportMeta={getReportMeta()} fromDate={fromDate} toDate={toDate} isSuperAdmin={currentUser.role === 'SUPER_ADMIN'} locations={locations} viewLocationId={viewLocationId} />}
           {activeTab === 'Stock Report' && <StockReport currentUser={currentUser} companyInfo={companyInfo} reportMeta={getReportMeta()} />}
+          {activeTab === 'Search Item' && <SearchItemReport currentUser={currentUser} />}
         </div>
       </main>
 

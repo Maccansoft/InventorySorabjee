@@ -2194,4 +2194,811 @@ router.get('/check-duplicate-item', async (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK PURCHASE EXCEL IMPORT — ISOLATED FEATURE (does NOT affect any existing routes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/inventory/purchases/validate-import
+ * Validates Excel rows against master data — NO database writes.
+ * Returns enriched rows with IDs and per-row validation errors.
+ */
+router.post('/purchases/validate-import', async (req, res) => {
+    try {
+        const { rows, location_id, fiscal_year_id } = req.body;
+
+        if (!rows || !Array.isArray(rows) || rows.length === 0) {
+            return res.status(400).json({ error: 'No rows provided for validation.' });
+        }
+        if (!location_id || !fiscal_year_id) {
+            return res.status(400).json({ error: 'location_id and fiscal_year_id are required.' });
+        }
+
+        // Check if fiscal year is closed
+        const [[fy]] = await db.query('SELECT is_closed, label FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
+        if (!fy) return res.status(400).json({ error: 'Invalid fiscal year.' });
+        if (fy.is_closed) return res.status(403).json({ error: 'Cannot import into a closed fiscal year.' });
+
+        // Load all master data once for matching
+        const [makers]    = await db.query('SELECT id, name FROM makers ORDER BY name');
+        const [categories] = await db.query('SELECT id, name, maker_id FROM categories ORDER BY name');
+        const [powers]     = await db.query('SELECT id, power FROM powers ORDER BY power');
+        const [suppliers]  = await db.query('SELECT id, name FROM suppliers WHERE location_id = ?', [location_id]);
+
+        // Build lookup maps (case-insensitive)
+        const makerMap    = new Map(makers.map(m => [m.name.trim().toLowerCase(), m]));
+        const powerMap    = new Map(powers.map(p => [p.power.trim().toLowerCase(), p]));
+        const supplierMap = new Map(suppliers.map(s => [s.name.trim().toLowerCase(), s]));
+
+        const validatedRows = rows.map((row, idx) => {
+            const errors = [];
+            const result = { _rowIndex: idx, _valid: false };
+
+            // ── Supplier / Vendor ──
+            const supplierRaw = String(row.supplier_vendor || row['Supplier/Vendor'] || row.Supplier || row.Vendor || '').trim();
+            if (!supplierRaw) {
+                errors.push('Supplier/Vendor is required');
+            } else {
+                const sup = supplierMap.get(supplierRaw.toLowerCase());
+                if (!sup) {
+                    errors.push(`Supplier "${supplierRaw}" not found in master (this location)`);
+                } else {
+                    result.supplier_id   = sup.id;
+                    result.supplier_name = sup.name;
+                }
+            }
+
+            // ── Transaction Date ──
+            const transDateRaw = String(row.transaction_date || row['Transaction Date'] || row.TransactionDate || '').trim();
+            if (!transDateRaw) {
+                errors.push('Transaction Date is required');
+            } else {
+                const parsed = parseExcelDate(transDateRaw);
+                if (!parsed) {
+                    errors.push(`Invalid Transaction Date: "${transDateRaw}". Use YYYY-MM-DD or DD/MM/YYYY`);
+                } else {
+                    result.trans_date = parsed;
+                }
+            }
+
+            // ── Maker ──
+            const makerRaw = String(row.maker || row.Maker || '').trim();
+            if (!makerRaw) {
+                errors.push('Maker is required');
+            } else {
+                const mk = makerMap.get(makerRaw.toLowerCase());
+                if (!mk) {
+                    errors.push(`Maker "${makerRaw}" not found in master`);
+                } else {
+                    result.maker_id   = mk.id;
+                    result.maker_name = mk.name;
+                }
+            }
+
+            // ── Category (must belong to the resolved Maker) ──
+            const categoryRaw = String(row.category || row.Category || '').trim();
+            if (!categoryRaw) {
+                errors.push('Category is required');
+            } else if (result.maker_id) {
+                const cat = categories.find(c =>
+                    c.name.trim().toLowerCase() === categoryRaw.toLowerCase() &&
+                    c.maker_id === result.maker_id
+                );
+                if (!cat) {
+                    errors.push(`Category "${categoryRaw}" not found under Maker "${result.maker_name || makerRaw}"`);
+                } else {
+                    result.category_id   = cat.id;
+                    result.category_name = cat.name;
+                }
+            }
+
+            // ── Power (optional field) ──
+            const powerRaw = String(row.power || row.Power || '').trim();
+            if (powerRaw) {
+                const pw = powerMap.get(powerRaw.toLowerCase());
+                if (!pw) {
+                    errors.push(`Power "${powerRaw}" not found in master`);
+                } else {
+                    result.power_id    = pw.id;
+                    result.power_label = pw.power;
+                }
+            } else {
+                result.power_id = null;
+            }
+
+            // ── Lot No ──
+            result.lot_no = String(row.lot_no || row['Lot No'] || row.LotNo || '').trim() || null;
+
+            // ── SNO ──
+            result.sno = String(row.sno || row.SNO || row.SNo || '0').trim() || '0';
+
+            // ── MFG DATE ──
+            const mfgRaw = String(row.mfg_date || row['MFG DATE'] || row.MfgDate || '').trim();
+            if (mfgRaw) {
+                const parsedMfg = parseExcelDate(mfgRaw);
+                if (!parsedMfg) {
+                    errors.push(`Invalid MFG DATE: "${mfgRaw}". Use YYYY-MM-DD or DD/MM/YYYY`);
+                } else {
+                    result.mfg_date = parsedMfg;
+                }
+            } else {
+                result.mfg_date = null;
+            }
+
+            // ── EXP DATE ──
+            const expRaw = String(row.exp_date || row['EXP DATE'] || row.ExpDate || '').trim();
+            if (expRaw) {
+                const parsedExp = parseExcelDate(expRaw);
+                if (!parsedExp) {
+                    errors.push(`Invalid EXP DATE: "${expRaw}". Use YYYY-MM-DD or DD/MM/YYYY`);
+                } else {
+                    result.exp_date = parsedExp;
+                    // Cross-validate: exp must be after mfg
+                    if (result.mfg_date && parsedExp <= result.mfg_date) {
+                        errors.push('EXP DATE must be after MFG DATE');
+                    }
+                }
+            } else {
+                result.exp_date = null;
+            }
+
+            // ── Defaults ──
+            result.qty    = 1;
+            result.rate   = 0;
+            result.p_rate = '';
+            result.amount = 0;
+
+            result._errors = errors;
+            result._valid  = errors.length === 0;
+            return result;
+        });
+
+        const totalRows   = validatedRows.length;
+        const validRows   = validatedRows.filter(r => r._valid).length;
+        const invalidRows = totalRows - validRows;
+
+        res.json({ success: true, totalRows, validRows, invalidRows, rows: validatedRows });
+    } catch (err) {
+        console.error('[PurchaseImport/validate] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * POST /api/inventory/purchases/import-excel
+ * Saves validated rows as one-or-more new Purchase transactions.
+ * Groups rows by trans_date + supplier_id into separate transactions.
+ * Uses the EXACT same logic as the existing createTxEndPoints POST handler.
+ */
+router.post('/purchases/import-excel', async (req, res) => {
+    const { rows, location_id, fiscal_year_id, user_id } = req.body;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: 'No rows provided for import.' });
+    }
+    if (!location_id || !fiscal_year_id || !user_id) {
+        return res.status(400).json({ error: 'location_id, fiscal_year_id and user_id are required.' });
+    }
+
+    // Only import valid rows
+    const importableRows = rows.filter(r => r._valid !== false);
+    if (importableRows.length === 0) {
+        return res.status(400).json({ error: 'No valid rows to import after filtering.' });
+    }
+
+    // Check fiscal year
+    const [[fy]] = await db.query('SELECT is_closed FROM fiscal_years WHERE id = ?', [fiscal_year_id]);
+    if (!fy) return res.status(400).json({ error: 'Invalid fiscal year.' });
+    if (fy.is_closed) return res.status(403).json({ error: 'Cannot import into a closed fiscal year.' });
+
+    let conn;
+    try {
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+
+        // Group rows by trans_date + supplier_id (one transaction per unique pair)
+        const groups = new Map();
+        for (const row of importableRows) {
+            const key = `${row.trans_date}|${row.supplier_id}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(row);
+        }
+
+        const createdTransactions = [];
+
+        for (const [key, groupRows] of groups.entries()) {
+            const [trans_date, supplier_id_str] = key.split('|');
+            const supplier_id = parseInt(supplier_id_str);
+
+            // --- GLOBAL UNIQUENESS CHECK (same as existing purchase POST) ---
+            for (const d of groupRows) {
+                if (d.lot_no && d.sno && d.sno !== '0' && d.sno !== '') {
+                    const [[conflict]] = await conn.query(
+                        `SELECT h.trans_no FROM purchase_details d JOIN purchases h ON d.purchase_id = h.id WHERE d.lot_no = ? AND d.sno = ?`,
+                        [d.lot_no, d.sno]
+                    );
+                    if (conflict) {
+                        throw new Error(`Serial Conflict: Lot #${d.lot_no} / SNo #${d.sno} already exists in ${conflict.trans_no}.`);
+                    }
+                }
+            }
+
+            // Generate transaction number
+            const txIdData = await genTransNo(conn, 'purchases', 'PUR', location_id, fiscal_year_id);
+            const { trans_no, sequence_no, location_code, fiscal_year_label, transaction_type } = txIdData;
+
+            // Calculate totals
+            const total_amount = groupRows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+            const total_qty    = groupRows.reduce((sum, r) => sum + parseFloat(r.qty || 0), 0);
+
+            // Insert header
+            const [headerResult] = await conn.query(
+                `INSERT INTO purchases 
+                 (trans_no, trans_date, fiscal_year_id, user_id, location_id, sequence_no, location_code, fiscal_year_label, transaction_type, total_amount, supplier_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [trans_no, trans_date, fiscal_year_id, user_id, location_id, sequence_no, location_code, fiscal_year_label, transaction_type, Math.round(total_amount), supplier_id]
+            );
+            const headerId = headerResult.insertId;
+
+            // Insert details using the existing insertDetails helper
+            const detailRows = groupRows.map(d => ({
+                maker_id:    d.maker_id,
+                category_id: d.category_id,
+                power_id:    d.power_id || null,
+                lot_no:      d.lot_no || null,
+                sno:         d.sno || null,
+                mfg_date:    d.mfg_date || null,
+                exp_date:    d.exp_date || null,
+                qty:         1,
+                qty_in_hand: 0,
+                rate:        0,
+                p_rate:      '',
+                amount:      0
+            }));
+            await insertDetails(conn, 'purchase_details', 'purchase_id', headerId, detailRows);
+
+            // Ledger Sync (same as existing purchase POST)
+            await syncInventoryToLedger(conn, {
+                tx_id:          headerId,
+                trans_no,
+                trans_date,
+                party_id:       supplier_id,
+                total_amount:   Math.round(total_amount),
+                location_id,
+                fiscal_year_id,
+                type:           'PURCHASE',
+                headerTable:    'purchases'
+            });
+
+            createdTransactions.push({ trans_no, rowCount: groupRows.length, supplier_id, trans_date });
+        }
+
+        await conn.commit();
+        res.json({
+            success:      true,
+            transactions: createdTransactions,
+            totalImported: importableRows.length
+        });
+    } catch (err) {
+        if (conn) await conn.rollback();
+        console.error('[PurchaseImport/import-excel] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    } finally {
+        if (conn) conn.release();
+    }
+});
+
+/**
+ * Local date parser for Excel import — handles common formats.
+ * Returns YYYY-MM-DD string or null.
+ */
+function parseExcelDate(value) {
+    if (!value && value !== 0) return null;
+
+    // Handle Excel serial numbers (numeric date)
+    if (typeof value === 'number' || (!isNaN(Number(value)) && !String(value).includes('-') && !String(value).includes('/'))) {
+        const num = Number(value);
+        if (num > 1000 && num < 100000) {
+            // Excel epoch: January 1, 1900 = 1; JS epoch offset
+            const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+            const d = new Date(excelEpoch.getTime() + num * 86400000);
+            if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        }
+    }
+
+    const str = String(value).trim();
+    if (!str || str === '-' || str.toLowerCase() === 'n/a') return null;
+
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+    // DD/MM/YYYY
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+        const [d, m, y] = str.split('/');
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    // MM/DD/YYYY (US format)
+    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(str)) {
+        const parts = str.split('/');
+        const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+        return `${y}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+
+    // DD-MMM-YYYY (e.g., 01-MAY-2026)
+    if (/^\d{1,2}-[A-Za-z]{3}-\d{4}$/.test(str)) {
+        const months = { JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12' };
+        const parts = str.split('-');
+        const m = months[parts[1].toUpperCase()];
+        if (m) return `${parts[2]}-${m}-${parts[0].padStart(2, '0')}`;
+    }
+
+    // Fallback: JS Date parse
+    try {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    } catch (e) {}
+
+    return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH ITEM REPORT — ISOLATED READ-ONLY ENDPOINT
+// Does NOT insert, update, delete, post, or modify any existing data/logic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get('/search-item', async (req, res) => {
+    try {
+        const { barcode, location_id, fiscal_year_id } = req.query;
+        const { role, is_head_office, location_id: userLocId } = req.user;
+
+        if (!barcode || !barcode.trim()) {
+            return res.status(400).json({ error: 'Barcode is required.' });
+        }
+
+        const trimmed = barcode.trim();
+        const cleanVal = trimmed.replace(/[^a-zA-Z0-9]/g, '');
+
+        // ── Step 1: Parse barcode using existing structural engine (read-only) ──
+        const [setups] = await db.query(`
+            SELECT s.*, m.name as maker_name 
+            FROM barcode_format_setup s
+            JOIN makers m ON s.maker_id = m.id
+            WHERE s.is_active = 1
+            ORDER BY s.id ASC
+        `);
+
+        let parsedBarcodeInfo = { lot_no: null, sno: null, exp_date: null, mfg_date: null, maker: null };
+        let barcodeFound = false;
+
+        for (const s of setups) {
+            const cleanSample = s.sample_barcode.replace(/[^a-zA-Z0-9]/g, '');
+            if (cleanVal.length === cleanSample.length || cleanSample.includes(cleanVal) || cleanVal.includes(cleanSample)) {
+                const lotPos = cleanSample.indexOf(s.lot_no);
+                const snoPos = cleanSample.indexOf(s.sno);
+
+                let foundLot = s.lot_no;
+                let foundSno = s.sno;
+                let foundExp = s.exp_date;
+
+                if (lotPos !== -1 && cleanVal.length >= (lotPos + s.lot_no.length)) {
+                    foundLot = cleanVal.substring(lotPos, lotPos + s.lot_no.length);
+                }
+                if (snoPos !== -1 && cleanVal.length >= (snoPos + s.sno.length)) {
+                    foundSno = cleanVal.substring(snoPos, snoPos + s.sno.length);
+                }
+
+                const expDateObj = new Date(s.exp_date);
+                if (!isNaN(expDateObj.getTime())) {
+                    const yy = String(expDateObj.getFullYear()).slice(-2);
+                    const mm = String(expDateObj.getMonth() + 1).padStart(2, '0');
+                    const dd = String(expDateObj.getDate()).padStart(2, '0');
+                    const patterns = [`${yy}${mm}${dd}`, `${dd}${mm}${yy}`];
+                    for (const p of patterns) {
+                        const expPos = cleanSample.indexOf(p);
+                        if (expPos !== -1 && cleanVal.length >= (expPos + 6)) {
+                            const rawExp = cleanVal.substring(expPos, expPos + 6);
+                            let eY, eM, eD;
+                            if (s.maker_name.toUpperCase() === 'IRIS') {
+                                if (p === `${dd}${mm}${yy}`) { eD = rawExp.substring(0, 2); eM = rawExp.substring(2, 4); eY = rawExp.substring(4, 6); }
+                                else { eY = rawExp.substring(0, 2); eM = rawExp.substring(2, 4); eD = rawExp.substring(4, 6); }
+                            } else {
+                                eY = rawExp.substring(0, 2); eM = rawExp.substring(2, 4); eD = rawExp.substring(4, 6);
+                            }
+                            const fullY = parseInt(eY) > 50 ? `19${eY}` : `20${eY}`;
+                            foundExp = `${fullY}-${eM}-${eD}`;
+                            break;
+                        }
+                    }
+                }
+
+                const mfgDate = new Date(foundExp);
+                if (!isNaN(mfgDate.getTime())) mfgDate.setFullYear(mfgDate.getFullYear() - s.mfg_years_less);
+
+                parsedBarcodeInfo = {
+                    lot_no: foundLot,
+                    sno: foundSno,
+                    exp_date: foundExp instanceof Date ? foundExp.toISOString().split('T')[0] : foundExp,
+                    mfg_date: mfgDate instanceof Date && !isNaN(mfgDate.getTime()) ? mfgDate.toISOString().split('T')[0] : null,
+                    maker: s.maker_name
+                };
+                barcodeFound = true;
+                break;
+            }
+        }
+
+        // Fallback: try barcode_master table direct lookup
+        if (!barcodeFound) {
+            const [bmRows] = await db.query(
+                'SELECT lot_no, sno, exp_date, mfg_date FROM barcode_master WHERE barcode = ? LIMIT 1',
+                [trimmed]
+            );
+            if (bmRows.length > 0) {
+                parsedBarcodeInfo = {
+                    lot_no: bmRows[0].lot_no,
+                    sno: bmRows[0].sno,
+                    exp_date: bmRows[0].exp_date ? new Date(bmRows[0].exp_date).toISOString().split('T')[0] : null,
+                    mfg_date: bmRows[0].mfg_date ? new Date(bmRows[0].mfg_date).toISOString().split('T')[0] : null,
+                    maker: null
+                };
+                barcodeFound = true;
+            }
+        }
+
+        if (!barcodeFound) {
+            return res.json({
+                parsedBarcodeInfo: null,
+                itemMasterInfo: null,
+                currentStatus: null,
+                currentLocation: null,
+                movementHistory: [],
+                message: 'Barcode could not be parsed. No matching barcode setup found.'
+            });
+        }
+
+        const { lot_no, sno } = parsedBarcodeInfo;
+
+        if (!lot_no) {
+            return res.json({
+                parsedBarcodeInfo,
+                itemMasterInfo: null,
+                currentStatus: null,
+                currentLocation: null,
+                movementHistory: [],
+                message: 'Barcode parsed but Lot No is missing. Cannot search incomplete data.'
+            });
+        }
+
+        // ── Step 2: Resolve item master info (maker, category, power) by lot_no + sno ──
+        const hasSno = sno && sno !== '0' && sno !== '';
+        const masterParams = [lot_no, ...(hasSno ? [sno] : []), lot_no, ...(hasSno ? [sno] : []), lot_no, ...(hasSno ? [sno] : [])];
+
+        const [masterRows] = await db.query(`
+            SELECT maker_id, category_id, power_id, mfg_date, exp_date FROM (
+                SELECT maker_id, category_id, power_id, mfg_date, exp_date, '1900-01-01' AS trans_date, id, 1 AS priority
+                FROM stock_opening_balances
+                WHERE lot_no = ? ${hasSno ? 'AND sno = ?' : ''}
+
+                UNION ALL
+
+                SELECT d.maker_id, d.category_id, d.power_id, d.mfg_date, d.exp_date, h.trans_date, h.id, 2 AS priority
+                FROM purchase_details d JOIN purchases h ON d.purchase_id = h.id
+                WHERE d.lot_no = ? ${hasSno ? 'AND d.sno = ?' : ''}
+
+                UNION ALL
+
+                SELECT d.maker_id, d.category_id, d.power_id, d.mfg_date, d.exp_date, h.trans_date, h.id, 3 AS priority
+                FROM transfer_details d JOIN transfers h ON d.transfer_id = h.id
+                WHERE d.lot_no = ? ${hasSno ? 'AND d.sno = ?' : ''}
+            ) AS t
+            ORDER BY priority ASC, trans_date DESC, id DESC
+            LIMIT 1
+        `, masterParams);
+
+        let itemMasterInfo = { maker_id: null, maker_name: parsedBarcodeInfo.maker || null, category_id: null, category_name: null, power_id: null, power_name: null };
+        if (masterRows.length > 0) {
+            const mr = masterRows[0];
+            const [[mk]] = mr.maker_id ? await db.query('SELECT name FROM makers WHERE id = ?', [mr.maker_id]) : [[null]];
+            const [[cat]] = mr.category_id ? await db.query('SELECT name FROM categories WHERE id = ?', [mr.category_id]) : [[null]];
+            const [[pw]] = mr.power_id ? await db.query('SELECT power FROM powers WHERE id = ?', [mr.power_id]) : [[null]];
+            itemMasterInfo = {
+                maker_id: mr.maker_id,
+                maker_name: mk ? mk.name : (parsedBarcodeInfo.maker || null),
+                category_id: mr.category_id,
+                category_name: cat ? cat.name : null,
+                power_id: mr.power_id,
+                power_name: pw ? pw.power : null
+            };
+            if (mr.mfg_date && !parsedBarcodeInfo.mfg_date) parsedBarcodeInfo.mfg_date = mr.mfg_date ? new Date(mr.mfg_date).toISOString().split('T')[0] : null;
+            if (mr.exp_date && !parsedBarcodeInfo.exp_date) parsedBarcodeInfo.exp_date = mr.exp_date ? new Date(mr.exp_date).toISOString().split('T')[0] : null;
+        }
+
+        // ── Step 3: Build complete movement history ──
+        // Location access control (mirrors existing stock-report behaviour)
+        const isSuperAdmin = role === 'SUPER_ADMIN' && is_head_office;
+        const effectiveLocId = isSuperAdmin ? (location_id || null) : userLocId;
+
+        const snoFilter = hasSno ? 'AND d.sno = ?' : '';
+        const snoParam = hasSno ? [sno] : [];
+        const snoFilterPlain = hasSno ? 'AND sno = ?' : '';
+
+        // Build history queries — each returns normalised columns
+        const historySQL = `
+            SELECT * FROM (
+
+                -- 1. Opening Stock
+                SELECT
+                    ob.id,
+                    '1900-01-01' AS trans_date,
+                    ob.trans_no,
+                    'Opening Stock' AS tx_type,
+                    NULL AS from_location_id,
+                    NULL AS from_location_name,
+                    ob.location_id AS to_location_id,
+                    loc_to.name AS to_location_name,
+                    ob.qty AS qty,
+                    NULL AS party_name,
+                    NULL AS party_type,
+                    ob.lot_no, ob.sno, ob.mfg_date, ob.exp_date,
+                    1 AS sort_priority
+                FROM stock_opening_balances ob
+                LEFT JOIN locations loc_to ON ob.location_id = loc_to.id
+                WHERE ob.lot_no = ? ${snoFilterPlain}
+                ${effectiveLocId ? 'AND ob.location_id = ?' : ''}
+
+                UNION ALL
+
+                -- 2. Stock Purchase
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Stock Purchase' AS tx_type,
+                    NULL AS from_location_id,
+                    NULL AS from_location_name,
+                    h.location_id AS to_location_id,
+                    loc_to.name AS to_location_name,
+                    d.qty AS qty,
+                    sup.name AS party_name,
+                    'Supplier' AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    2 AS sort_priority
+                FROM purchase_details d
+                JOIN purchases h ON d.purchase_id = h.id
+                LEFT JOIN locations loc_to ON h.location_id = loc_to.id
+                LEFT JOIN suppliers sup ON h.supplier_id = sup.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND h.location_id = ?' : ''}
+
+                UNION ALL
+
+                -- 3. Purchase Return
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Purchase Return' AS tx_type,
+                    h.location_id AS from_location_id,
+                    loc_fr.name AS from_location_name,
+                    NULL AS to_location_id,
+                    NULL AS to_location_name,
+                    d.qty AS qty,
+                    sup.name AS party_name,
+                    'Supplier' AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    3 AS sort_priority
+                FROM purchase_return_details d
+                JOIN purchase_returns h ON d.purchase_return_id = h.id
+                LEFT JOIN locations loc_fr ON h.location_id = loc_fr.id
+                LEFT JOIN suppliers sup ON h.supplier_id = sup.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND h.location_id = ?' : ''}
+
+                UNION ALL
+
+                -- 4. Transfer Request
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Transfer Request' AS tx_type,
+                    h.location_id AS from_location_id,
+                    loc_fr.name AS from_location_name,
+                    h.to_location_id,
+                    loc_to.name AS to_location_name,
+                    d.qty AS qty,
+                    NULL AS party_name,
+                    NULL AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    4 AS sort_priority
+                FROM transfer_request_details d
+                JOIN transfer_requests h ON d.request_id = h.id
+                LEFT JOIN locations loc_fr ON h.location_id = loc_fr.id
+                LEFT JOIN locations loc_to ON h.to_location_id = loc_to.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND (h.location_id = ? OR h.to_location_id = ?)' : ''}
+
+                UNION ALL
+
+                -- 5. Stock Transfer
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Stock Transfer' AS tx_type,
+                    h.from_location_id,
+                    loc_fr.name AS from_location_name,
+                    h.to_location_id,
+                    loc_to.name AS to_location_name,
+                    d.qty AS qty,
+                    NULL AS party_name,
+                    NULL AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    5 AS sort_priority
+                FROM transfer_details d
+                JOIN transfers h ON d.transfer_id = h.id
+                LEFT JOIN locations loc_fr ON h.from_location_id = loc_fr.id
+                LEFT JOIN locations loc_to ON h.to_location_id = loc_to.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND (h.from_location_id = ? OR h.to_location_id = ?)' : ''}
+
+                UNION ALL
+
+                -- 6. Transfer Return
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Transfer Return' AS tx_type,
+                    h.location_id AS from_location_id,
+                    loc_fr.name AS from_location_name,
+                    h.original_sending_location_id AS to_location_id,
+                    loc_to.name AS to_location_name,
+                    d.qty_return AS qty,
+                    NULL AS party_name,
+                    NULL AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    6 AS sort_priority
+                FROM stock_transfer_return_items d
+                JOIN stock_transfer_returns h ON d.return_id = h.id
+                LEFT JOIN locations loc_fr ON h.location_id = loc_fr.id
+                LEFT JOIN locations loc_to ON h.original_sending_location_id = loc_to.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND (h.location_id = ? OR h.original_sending_location_id = ?)' : ''}
+
+                UNION ALL
+
+                -- 7. Sales Invoice
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Sales Invoice' AS tx_type,
+                    h.location_id AS from_location_id,
+                    loc_fr.name AS from_location_name,
+                    NULL AS to_location_id,
+                    NULL AS to_location_name,
+                    d.qty AS qty,
+                    cust.name AS party_name,
+                    'Customer' AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    7 AS sort_priority
+                FROM sales_details d
+                JOIN sales h ON d.sale_id = h.id
+                LEFT JOIN locations loc_fr ON h.location_id = loc_fr.id
+                LEFT JOIN customers cust ON h.customer_id = cust.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND h.location_id = ?' : ''}
+
+                UNION ALL
+
+                -- 8. Sales Return
+                SELECT
+                    h.id,
+                    h.trans_date,
+                    h.trans_no,
+                    'Sales Return' AS tx_type,
+                    NULL AS from_location_id,
+                    NULL AS from_location_name,
+                    h.location_id AS to_location_id,
+                    loc_to.name AS to_location_name,
+                    d.qty AS qty,
+                    cust.name AS party_name,
+                    'Customer' AS party_type,
+                    d.lot_no, d.sno, d.mfg_date, d.exp_date,
+                    8 AS sort_priority
+                FROM sales_return_details d
+                JOIN sales_returns h ON d.sales_return_id = h.id
+                LEFT JOIN locations loc_to ON h.location_id = loc_to.id
+                LEFT JOIN customers cust ON h.customer_id = cust.id
+                WHERE d.lot_no = ? ${snoFilter}
+                ${effectiveLocId ? 'AND h.location_id = ?' : ''}
+
+            ) AS history
+            ORDER BY trans_date ASC, sort_priority ASC, id ASC
+        `;
+
+        // Build params array carefully for each of the 8 UNION branches
+        const buildBranchParams = (extraCount = 0) => {
+            const p = [lot_no, ...snoParam];
+            if (effectiveLocId) { for (let i = 0; i < extraCount; i++) p.push(effectiveLocId); }
+            return p;
+        };
+
+        const historyParams = [
+            ...buildBranchParams(1),  // Opening Stock
+            ...buildBranchParams(1),  // Purchase
+            ...buildBranchParams(1),  // Purchase Return
+            ...buildBranchParams(2),  // Transfer Request (from or to)
+            ...buildBranchParams(2),  // Stock Transfer (from or to)
+            ...buildBranchParams(2),  // Transfer Return (from or to)
+            ...buildBranchParams(1),  // Sales Invoice
+            ...buildBranchParams(1),  // Sales Return
+        ];
+
+        const [historyRows] = await db.query(historySQL, historyParams);
+
+        if (historyRows.length === 0) {
+            return res.json({
+                parsedBarcodeInfo,
+                itemMasterInfo,
+                currentStatus: 'NOT_FOUND',
+                currentLocation: null,
+                movementHistory: [],
+                message: 'No stock movement found for this barcode/item.'
+            });
+        }
+
+        // ── Step 4: Determine current status from last movement ──
+        const lastMove = historyRows[historyRows.length - 1];
+        let currentStatus = 'IN_STOCK';
+        let currentLocation = lastMove.to_location_name || lastMove.from_location_name || null;
+
+        switch (lastMove.tx_type) {
+            case 'Sales Invoice':   currentStatus = 'SOLD';        currentLocation = lastMove.from_location_name; break;
+            case 'Stock Transfer':  currentStatus = 'TRANSFERRED'; currentLocation = lastMove.to_location_name;   break;
+            case 'Transfer Return': currentStatus = 'RETURNED';    currentLocation = lastMove.to_location_name;   break;
+            case 'Purchase Return': currentStatus = 'RETURNED';    currentLocation = lastMove.from_location_name; break;
+            case 'Sales Return':    currentStatus = 'IN_STOCK';    currentLocation = lastMove.to_location_name;   break;
+            case 'Opening Stock':
+            case 'Stock Purchase':  currentStatus = 'IN_STOCK';    currentLocation = lastMove.to_location_name;   break;
+            default: currentStatus = 'IN_STOCK';
+        }
+
+        // Normalise history rows for frontend
+        const movementHistory = historyRows.map((row, idx) => ({
+            seq: idx + 1,
+            tx_type: row.tx_type,
+            trans_no: row.trans_no,
+            trans_date: row.trans_date,
+            from_location: row.from_location_name || null,
+            to_location: row.to_location_name || null,
+            qty: parseFloat(row.qty || 0),
+            party_name: row.party_name || null,
+            party_type: row.party_type || null,
+            lot_no: row.lot_no,
+            sno: row.sno,
+            mfg_date: row.mfg_date,
+            exp_date: row.exp_date,
+        }));
+
+        res.json({
+            parsedBarcodeInfo,
+            itemMasterInfo,
+            currentStatus,
+            currentLocation,
+            movementHistory,
+            message: null
+        });
+
+    } catch (err) {
+        console.error('[SearchItem] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 module.exports = router;
